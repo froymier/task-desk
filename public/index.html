@@ -656,13 +656,17 @@ list.addEventListener("click", async e => {
   if (toggle) {
     const t = tasks.find(x=>x.id===toggle.dataset.toggle);
     if (!t) return;
+    const prevDone = t.done, prevCompleted = t.completedAt;
     const newDone = !t.done;
-    t.done = newDone; render();                 // optimistic
+    t.done = newDone;
+    t.completedAt = newDone ? Date.now() : null;   // optimistic, so "Done date" shows instantly
+    render();
     try {
       const updated = await apiUpdate(t.id, { done: newDone });
       const i = tasks.findIndex(x=>x.id===t.id); if (i>-1) tasks[i] = updated;
+      render();                                    // sync with the server's saved timestamp
     } catch (err) {
-      t.done = !newDone; render();              // roll back
+      t.done = prevDone; t.completedAt = prevCompleted; render();   // roll back
       alert("Couldn't update — is the server running?");
     }
   } else if (edit) {
