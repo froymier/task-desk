@@ -609,6 +609,9 @@ function card(t) {
       <button class="icon-btn" data-edit="${t.id}" aria-label="Edit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
+      <button class="icon-btn" data-copy="${t.id}" aria-label="Duplicate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
       <button class="icon-btn del" data-del="${t.id}" aria-label="Delete">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
       </button>
@@ -617,10 +620,11 @@ function card(t) {
 }
 
 /* ---------- modal ---------- */
-function openModal(t) {
-  editingId = t ? t.id : null;
-  $("#modalTitle").textContent = t ? "Edit task" : "Add task";
-  $("#saveBtn").textContent = t ? "Save changes" : "Add task";
+function openModal(t, asCopy) {
+  const editing = !!t && !asCopy;          // copy mode prefills but creates a NEW task
+  editingId = editing ? t.id : null;
+  $("#modalTitle").textContent = editing ? "Edit task" : asCopy ? "Duplicate task" : "Add task";
+  $("#saveBtn").textContent = editing ? "Save changes" : "Add task";
   $("#f-title").value = t ? t.title : "";
   $("#f-who").value = t ? (t.who||"") : (personFilter || ME);
   $("#f-class").value = t ? (t.cls||"") : "";
@@ -699,6 +703,7 @@ $("#filterRow").addEventListener("click", e => {
 list.addEventListener("click", async e => {
   const toggle = e.target.closest("[data-toggle]");
   const edit = e.target.closest("[data-edit]");
+  const copy = e.target.closest("[data-copy]");
   const del = e.target.closest("[data-del]");
   if (toggle) {
     const t = tasks.find(x=>x.id===toggle.dataset.toggle);
@@ -718,6 +723,8 @@ list.addEventListener("click", async e => {
     }
   } else if (edit) {
     const t = tasks.find(x=>x.id===edit.dataset.edit); if (t) openModal(t);
+  } else if (copy) {
+    const t = tasks.find(x=>x.id===copy.dataset.copy); if (t) openModal(t, true);
   } else if (del) {
     const id = del.dataset.del;
     const t = tasks.find(x=>x.id===id);
