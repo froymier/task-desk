@@ -142,6 +142,11 @@
   }
   .cls-tag svg { width: 11px; height: 11px; color: var(--muted); }
   .added { font-size: 12px; color: var(--none); }
+  .proj-tag {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px;
+  }
+  .proj-tag svg { width: 11px; height: 11px; }
 
   .t-actions { display: flex; gap: 2px; flex: 0 0 auto; }
   .icon-btn {
@@ -240,6 +245,7 @@
       <button data-sort="due" aria-pressed="false">By deadline</button>
       <button data-sort="person" aria-pressed="true">By person</button>
       <button data-sort="class" aria-pressed="false">By class</button>
+      <button data-sort="project" aria-pressed="false">By project</button>
       <button data-sort="added" aria-pressed="false">Newest</button>
     </div>
     <button class="toggle-pill" id="weekToggle" aria-pressed="false">
@@ -301,6 +307,11 @@
         <option>Retrofits</option>
         <option>Service</option>
       </select>
+    </div>
+    <div class="field">
+      <label for="f-project">Project <span style="font-weight:400;text-transform:none;letter-spacing:0">(pick one or type a new one)</span></label>
+      <input id="f-project" list="projects" placeholder="e.g. Line 3 Upgrade" autocomplete="off" />
+      <datalist id="projects"></datalist>
     </div>
     <div class="field">
       <label for="f-due">Deadline</label>
@@ -435,6 +446,9 @@ function render() {
 
   // people who currently have tasks → filter chips
   const people = [...new Set(tasks.map(t=>t.who).filter(Boolean))].sort();
+  // previously used projects → autocomplete suggestions
+  const projects = [...new Set(tasks.map(t=>t.project).filter(Boolean))].sort();
+  $("#projects").innerHTML = projects.map(p=>`<option value="${esc(p)}">`).join("");
   const fr = $("#filterRow");
   if (people.length) {
     fr.innerHTML = `<button class="chip" data-person="" aria-pressed="${personFilter===null}">Everyone</button>` +
@@ -473,6 +487,12 @@ function render() {
     list.innerHTML = Object.keys(groups).sort((a,b)=> a==="No class"?1:b==="No class"?-1:a.localeCompare(b))
       .map(k => `<div class="group-head">${esc(k)}</div>` +
         sortDue(groups[k]).map(card).join("")).join("");
+  } else if (sortMode === "project") {
+    const groups = {};
+    shown.forEach(t => { const k = t.project || "No project"; (groups[k] ||= []).push(t); });
+    list.innerHTML = Object.keys(groups).sort((a,b)=> a==="No project"?1:b==="No project"?-1:a.localeCompare(b))
+      .map(k => `<div class="group-head">${esc(k)}</div>` +
+        sortDue(groups[k]).map(card).join("")).join("");
   } else if (sortMode === "added") {
     list.innerHTML = shown.slice().reverse().map(card).join("");
   } else {
@@ -494,6 +514,7 @@ function card(t) {
   const due = `<span class="due" style="color:${urgency(t)}">${cal}${dueLabel(t.due)}</span>`;
   const clsTag = t.cls ? `<span class="cls-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>${esc(t.cls)}</span>` : "";
   const added = t.createdAt ? `<span class="added">${addedLabel(t.createdAt)}</span>` : "";
+  const proj = t.project ? `<span class="proj-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l10-4 10 4-10 4z"/><path d="M2 7v10l10 4 10-4V7"/><path d="M12 11v10"/></svg>${esc(t.project)}</span>` : "";
   const notes = t.notes ? `<div class="t-notes">${esc(t.notes)}</div>` : "";
   return `<div class="task ${t.done?"done":""}" style="--rail:${urgency(t)}">
     <button class="check" data-toggle="${t.id}" aria-label="Toggle done">
@@ -501,7 +522,7 @@ function card(t) {
     </button>
     <div class="t-main">
       <div class="t-title">${esc(t.title)}</div>
-      <div class="t-meta">${who}${clsTag}${due}${added}</div>
+      <div class="t-meta">${who}${proj}${clsTag}${due}${added}</div>
       ${notes}
     </div>
     <div class="t-actions">
@@ -523,6 +544,7 @@ function openModal(t) {
   $("#f-title").value = t ? t.title : "";
   $("#f-who").value = t ? (t.who||"") : (personFilter || ME);
   $("#f-class").value = t ? (t.cls||"") : "";
+  $("#f-project").value = t ? (t.project||"") : "";
   $("#f-due").value = t ? (t.due||"") : "";
   $("#f-notes").value = t ? (t.notes||"") : "";
   $("#scrim").classList.add("open");
@@ -533,7 +555,7 @@ function closeModal() { $("#scrim").classList.remove("open"); editingId = null; 
 async function saveTask() {
   const title = $("#f-title").value.trim();
   if (!title) { $("#f-title").focus(); return; }
-  const data = { title, who: $("#f-who").value.trim(), cls: $("#f-class").value.trim(), due: $("#f-due").value || "", notes: $("#f-notes").value.trim() };
+  const data = { title, who: $("#f-who").value.trim(), cls: $("#f-class").value.trim(), project: $("#f-project").value.trim(), due: $("#f-due").value || "", notes: $("#f-notes").value.trim() };
   const btn = $("#saveBtn"); const label = btn.textContent;
   btn.disabled = true; btn.textContent = "Saving…";
   try {

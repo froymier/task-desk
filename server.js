@@ -30,6 +30,7 @@ const out = (d) => ({
   title: d.title,
   who: d.who || "",
   cls: d.cls || "",
+  project: d.project || "",
   due: d.due || "",
   notes: d.notes || "",
   done: !!d.done,
@@ -38,7 +39,7 @@ const out = (d) => ({
 
 // Keep only fields we allow clients to set.
 function clean(body, { partial } = {}) {
-  const allowed = ["title", "who", "cls", "due", "notes", "done"];
+  const allowed = ["title", "who", "cls", "project", "due", "notes", "done"];
   const obj = {};
   for (const k of allowed) {
     if (k in body) {
@@ -51,6 +52,7 @@ function clean(body, { partial } = {}) {
     obj.title = (obj.title || "").trim();
     obj.who = obj.who || "";
     obj.cls = obj.cls || "";
+    obj.project = obj.project || "";
     obj.due = obj.due || "";
     obj.notes = obj.notes || "";
     obj.done = false;
