@@ -1,6 +1,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Control &amp; Automation Task Desk</title>
+<title>Task Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -231,8 +231,8 @@
   <header>
     <div class="head-row">
       <div>
-        <p class="eyebrow">Assignments &amp; deadlines</p>
-        <h1>Control &amp; Automation Task Desk</h1>
+        <p class="eyebrow">Control &amp; Automation</p>
+        <h1>Task Desk</h1>
         <p class="summary" id="summary">Loading…</p>
       </div>
       <button class="signout" id="signoutBtn" hidden>
@@ -257,6 +257,10 @@
     <button class="toggle-pill" id="archiveToggle" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></svg>
       Archive
+    </button>
+    <button class="toggle-pill" id="doneToggle" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span id="doneToggleLabel">Hide done</span>
     </button>
     <div class="spacer"></div>
     <button class="add-btn" id="openAdd">
@@ -365,6 +369,7 @@ let sortMode = "person";
 let personFilter = null;
 let weekOnly = false;
 let archiveView = false;
+let hideDone = false;
 let editingId = null;
 
 const PALETTE = ["#136F63","#B45309","#7C3AED","#C2410C","#0E7490","#9D174D","#4D7C0F","#1D4ED8","#92400E","#0F766E"];
@@ -405,8 +410,22 @@ async function apiDelete(id) {
 /* ---------- helpers ---------- */
 const todayStr = () => new Date().toISOString().slice(0,10);
 const ARCHIVE_DAYS = 14;
-function isArchived(t) {
-  return !!(t.done && t.completedAt && (Date.now() - t.completedAt) > ARCHIVE_DAYS * 86400000);
+const NO_PROJECT = "\u0000none";
+const projKey = (t) => t.project || NO_PROJECT;
+// A whole project archives only once ALL its tasks are done AND the most
+// recent completion was more than ARCHIVE_DAYS ago. Returns the archived keys.
+function archivedProjectKeys() {
+  const groups = {};
+  tasks.forEach(t => { (groups[projKey(t)] ||= []).push(t); });
+  const cutoff = Date.now() - ARCHIVE_DAYS * 86400000;
+  const archived = new Set();
+  for (const k in groups) {
+    const g = groups[k];
+    if (!g.every(t => t.done)) continue;
+    const last = Math.max(...g.map(t => t.completedAt || 0));
+    if (last && last < cutoff) archived.add(k);
+  }
+  return archived;
 }
 function dayDiff(due) {
   if (!due) return null;
@@ -454,12 +473,14 @@ const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&
 
 /* ---------- render ---------- */
 function render() {
-  const active = tasks.filter(t => !isArchived(t));
-  const archivedTasks = tasks.filter(isArchived);
+  const archKeys = archivedProjectKeys();
+  const isArch = t => archKeys.has(projKey(t));
+  const active = tasks.filter(t => !isArch(t));
+  const archivedTasks = tasks.filter(isArch);
 
   const sum = $("#summary");
   if (archiveView) {
-    sum.innerHTML = `<b>${archivedTasks.length}</b> archived · done over ${ARCHIVE_DAYS} days ago`;
+    sum.innerHTML = `<b>${archKeys.size}</b> archived ${archKeys.size===1?"project":"projects"} · ${archivedTasks.length} ${archivedTasks.length===1?"task":"tasks"}`;
   } else if (tasks.length === 0) {
     sum.textContent = "No tasks yet — add the first one to start tracking.";
   } else {
@@ -482,20 +503,27 @@ function render() {
         <span class="dot" style="background:${colorFor(p)}"></span>${esc(p)}</button>`).join("");
   } else fr.innerHTML = "";
 
-  // ---- archive view: flat list, most recently completed first ----
+  // ---- archive view: grouped by project, most recently finished first ----
   if (archiveView) {
     let arch = personFilter ? archivedTasks.filter(t=>t.who===personFilter) : archivedTasks;
     if (arch.length === 0) {
-      list.innerHTML = `<div class="empty"><div class="big">Archive is empty</div>Completed tasks move here automatically ${ARCHIVE_DAYS} days after they're done.</div>`;
+      list.innerHTML = `<div class="empty"><div class="big">Archive is empty</div>A whole project moves here automatically once all its tasks are done and ${ARCHIVE_DAYS} days have passed.</div>`;
       return;
     }
-    arch = arch.slice().sort((a,b)=> (b.completedAt||0) - (a.completedAt||0));
-    list.innerHTML = arch.map(card).join("");
+    const groups = {};
+    arch.forEach(t => { const k = t.project || "No project"; (groups[k] ||= []).push(t); });
+    const lastDone = g => Math.max(...g.map(t => t.completedAt || 0));
+    const order = Object.keys(groups).sort((a,b)=> lastDone(groups[b]) - lastDone(groups[a]));
+    list.innerHTML = order.map(k =>
+      `<div class="group-head">${esc(k)}</div>` +
+      groups[k].slice().sort((a,b)=>(b.completedAt||0)-(a.completedAt||0)).map(card).join("")
+    ).join("");
     return;
   }
 
   // ---- normal views: archived tasks are hidden ----
   let shown = personFilter ? active.filter(t=>t.who===personFilter) : active.slice();
+  if (hideDone) shown = shown.filter(t => !t.done);
 
   if (weekOnly) {
     shown = shown.filter(t => {
@@ -506,7 +534,10 @@ function render() {
   }
 
   if (shown.length === 0) {
-    list.innerHTML = `<div class="empty"><div class="big">${tasks.length? "Nothing here":"A clear desk"}</div>${weekOnly? "Nothing due in the next 7 days." : (tasks.length? "No tasks match this filter.":"Add a task and assign it to someone.")}</div>`;
+    const msg = weekOnly ? "Nothing due in the next 7 days."
+      : hideDone ? "Done tasks are hidden — nothing open right now."
+      : (tasks.length ? "No tasks match this filter." : "Add a task and assign it to someone.");
+    list.innerHTML = `<div class="empty"><div class="big">${tasks.length? "Nothing here":"A clear desk"}</div>${msg}</div>`;
     return;
   }
 
@@ -626,6 +657,13 @@ $("#weekToggle").onclick = () => {
   weekOnly = !weekOnly;
   if (weekOnly && archiveView) { archiveView = false; $("#archiveToggle").setAttribute("aria-pressed", false); }
   $("#weekToggle").setAttribute("aria-pressed", weekOnly);
+  render();
+};
+
+$("#doneToggle").onclick = () => {
+  hideDone = !hideDone;
+  $("#doneToggle").setAttribute("aria-pressed", hideDone);
+  $("#doneToggleLabel").textContent = hideDone ? "Show done" : "Hide done";
   render();
 };
 
