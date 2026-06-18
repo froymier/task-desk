@@ -493,8 +493,10 @@ function render() {
 
   // people who currently have tasks → filter chips
   const people = [...new Set(tasks.map(t=>t.who).filter(Boolean))].sort();
-  // previously used projects → autocomplete suggestions
-  const projects = [...new Set(tasks.map(t=>t.project).filter(Boolean))].sort();
+  // previously used projects (excluding archived ones) → autocomplete suggestions
+  const projects = [...new Set(tasks.map(t=>t.project).filter(Boolean))]
+    .filter(p => !archKeys.has(p))
+    .sort();
   $("#projects").innerHTML = projects.map(p=>`<option value="${esc(p)}">`).join("");
   const fr = $("#filterRow");
   if (people.length && !archiveView) {
