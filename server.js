@@ -35,6 +35,7 @@ const out = (d) => ({
   notes: d.notes || "",
   done: !!d.done,
   createdAt: d.createdAt,
+  completedAt: d.completedAt || null,
 });
 
 // Keep only fields we allow clients to set.
@@ -164,6 +165,8 @@ app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
   catch { return res.status(400).json({ error: "Bad id" }); }
   try {
     const set = clean(req.body || {}, { partial: true });
+    // Record (or clear) the completion time so tasks can auto-archive 2 weeks later.
+    if ("done" in set) set.completedAt = set.done ? Date.now() : null;
     await tasks.updateOne({ _id }, { $set: set });
     const doc = await tasks.findOne({ _id });
     if (!doc) return res.status(404).json({ error: "Not found" });

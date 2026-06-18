@@ -142,6 +142,8 @@
   }
   .cls-tag svg { width: 11px; height: 11px; color: var(--muted); }
   .added { font-size: 12px; color: var(--none); }
+  .doneat { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 500; color: var(--ok); }
+  .doneat svg { width: 12px; height: 12px; }
   .proj-tag {
     display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
     color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px;
@@ -252,6 +254,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       Due this week
     </button>
+    <button class="toggle-pill" id="archiveToggle" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></svg>
+      Archive
+    </button>
     <div class="spacer"></div>
     <button class="add-btn" id="openAdd">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -358,6 +364,7 @@ let tasks = [];
 let sortMode = "person";
 let personFilter = null;
 let weekOnly = false;
+let archiveView = false;
 let editingId = null;
 
 const PALETTE = ["#136F63","#B45309","#7C3AED","#C2410C","#0E7490","#9D174D","#4D7C0F","#1D4ED8","#92400E","#0F766E"];
@@ -397,6 +404,10 @@ async function apiDelete(id) {
 
 /* ---------- helpers ---------- */
 const todayStr = () => new Date().toISOString().slice(0,10);
+const ARCHIVE_DAYS = 14;
+function isArchived(t) {
+  return !!(t.done && t.completedAt && (Date.now() - t.completedAt) > ARCHIVE_DAYS * 86400000);
+}
 function dayDiff(due) {
   if (!due) return null;
   const a = new Date(due + "T00:00:00"); const b = new Date(todayStr() + "T00:00:00");
@@ -419,6 +430,12 @@ function addedLabel(ts) {
   if (isNaN(d)) return "";
   return "Added " + d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+function doneLabel(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d)) return "";
+  return "Done " + d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 function urgency(t) {
   if (t.done) return "var(--ok)";
   const d = dayDiff(t.due);
@@ -437,12 +454,21 @@ const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&
 
 /* ---------- render ---------- */
 function render() {
-  const open = tasks.filter(t=>!t.done);
-  const overdue = open.filter(t=>dayDiff(t.due)!==null && dayDiff(t.due)<0).length;
+  const active = tasks.filter(t => !isArchived(t));
+  const archivedTasks = tasks.filter(isArchived);
+
   const sum = $("#summary");
-  if (tasks.length === 0) sum.textContent = "No tasks yet — add the first one to start tracking.";
-  else sum.innerHTML = `<b>${open.length}</b> open · <b>${tasks.length-open.length}</b> done` +
-    (overdue ? ` · <span class="over-count"><b>${overdue}</b> overdue</span>` : "");
+  if (archiveView) {
+    sum.innerHTML = `<b>${archivedTasks.length}</b> archived · done over ${ARCHIVE_DAYS} days ago`;
+  } else if (tasks.length === 0) {
+    sum.textContent = "No tasks yet — add the first one to start tracking.";
+  } else {
+    const open = active.filter(t=>!t.done);
+    const overdue = open.filter(t=>dayDiff(t.due)!==null && dayDiff(t.due)<0).length;
+    sum.innerHTML = `<b>${open.length}</b> open · <b>${active.length-open.length}</b> done` +
+      (overdue ? ` · <span class="over-count"><b>${overdue}</b> overdue</span>` : "") +
+      (archivedTasks.length ? ` · <span style="color:var(--none)">${archivedTasks.length} archived</span>` : "");
+  }
 
   // people who currently have tasks → filter chips
   const people = [...new Set(tasks.map(t=>t.who).filter(Boolean))].sort();
@@ -450,13 +476,26 @@ function render() {
   const projects = [...new Set(tasks.map(t=>t.project).filter(Boolean))].sort();
   $("#projects").innerHTML = projects.map(p=>`<option value="${esc(p)}">`).join("");
   const fr = $("#filterRow");
-  if (people.length) {
+  if (people.length && !archiveView) {
     fr.innerHTML = `<button class="chip" data-person="" aria-pressed="${personFilter===null}">Everyone</button>` +
       people.map(p=>`<button class="chip" data-person="${esc(p)}" aria-pressed="${personFilter===p}">
         <span class="dot" style="background:${colorFor(p)}"></span>${esc(p)}</button>`).join("");
   } else fr.innerHTML = "";
 
-  let shown = personFilter ? tasks.filter(t=>t.who===personFilter) : tasks.slice();
+  // ---- archive view: flat list, most recently completed first ----
+  if (archiveView) {
+    let arch = personFilter ? archivedTasks.filter(t=>t.who===personFilter) : archivedTasks;
+    if (arch.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="big">Archive is empty</div>Completed tasks move here automatically ${ARCHIVE_DAYS} days after they're done.</div>`;
+      return;
+    }
+    arch = arch.slice().sort((a,b)=> (b.completedAt||0) - (a.completedAt||0));
+    list.innerHTML = arch.map(card).join("");
+    return;
+  }
+
+  // ---- normal views: archived tasks are hidden ----
+  let shown = personFilter ? active.filter(t=>t.who===personFilter) : active.slice();
 
   if (weekOnly) {
     shown = shown.filter(t => {
@@ -514,6 +553,7 @@ function card(t) {
   const due = `<span class="due" style="color:${urgency(t)}">${cal}${dueLabel(t.due)}</span>`;
   const clsTag = t.cls ? `<span class="cls-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>${esc(t.cls)}</span>` : "";
   const added = t.createdAt ? `<span class="added">${addedLabel(t.createdAt)}</span>` : "";
+  const doneAt = (t.done && t.completedAt) ? `<span class="doneat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>${doneLabel(t.completedAt)}</span>` : "";
   const proj = t.project ? `<span class="proj-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l10-4 10 4-10 4z"/><path d="M2 7v10l10 4 10-4V7"/><path d="M12 11v10"/></svg>${esc(t.project)}</span>` : "";
   const notes = t.notes ? `<div class="t-notes">${esc(t.notes)}</div>` : "";
   return `<div class="task ${t.done?"done":""}" style="--rail:${urgency(t)}">
@@ -522,7 +562,7 @@ function card(t) {
     </button>
     <div class="t-main">
       <div class="t-title">${esc(t.title)}</div>
-      <div class="t-meta">${who}${proj}${clsTag}${due}${added}</div>
+      <div class="t-meta">${who}${proj}${clsTag}${due}${doneAt}${added}</div>
       ${notes}
     </div>
     <div class="t-actions">
@@ -584,7 +624,15 @@ document.addEventListener("keydown", e => { if (e.key==="Escape") closeModal(); 
 
 $("#weekToggle").onclick = () => {
   weekOnly = !weekOnly;
+  if (weekOnly && archiveView) { archiveView = false; $("#archiveToggle").setAttribute("aria-pressed", false); }
   $("#weekToggle").setAttribute("aria-pressed", weekOnly);
+  render();
+};
+
+$("#archiveToggle").onclick = () => {
+  archiveView = !archiveView;
+  if (archiveView && weekOnly) { weekOnly = false; $("#weekToggle").setAttribute("aria-pressed", false); }
+  $("#archiveToggle").setAttribute("aria-pressed", archiveView);
   render();
 };
 
@@ -621,6 +669,9 @@ list.addEventListener("click", async e => {
     const t = tasks.find(x=>x.id===edit.dataset.edit); if (t) openModal(t);
   } else if (del) {
     const id = del.dataset.del;
+    const t = tasks.find(x=>x.id===id);
+    const label = t ? `"${t.title}"` : "this task";
+    if (!confirm(`Delete ${label} permanently? This can't be undone.`)) return;
     const prev = tasks.slice();
     tasks = tasks.filter(x=>x.id!==id); render(); // optimistic
     try {
