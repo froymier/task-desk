@@ -141,6 +141,7 @@
     padding: 2px 8px; border-radius: 6px;
   }
   .cls-tag svg { width: 11px; height: 11px; color: var(--muted); }
+  .added { font-size: 12px; color: var(--none); }
 
   .t-actions { display: flex; gap: 2px; flex: 0 0 auto; }
   .icon-btn {
@@ -401,6 +402,12 @@ function dueLabel(due) {
   const dt = new Date(due + "T00:00:00");
   return "Due " + dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+function addedLabel(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d)) return "";
+  return "Added " + d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 function urgency(t) {
   if (t.done) return "var(--ok)";
   const d = dayDiff(t.due);
@@ -486,6 +493,7 @@ function card(t) {
   const cal = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`;
   const due = `<span class="due" style="color:${urgency(t)}">${cal}${dueLabel(t.due)}</span>`;
   const clsTag = t.cls ? `<span class="cls-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>${esc(t.cls)}</span>` : "";
+  const added = t.createdAt ? `<span class="added">${addedLabel(t.createdAt)}</span>` : "";
   const notes = t.notes ? `<div class="t-notes">${esc(t.notes)}</div>` : "";
   return `<div class="task ${t.done?"done":""}" style="--rail:${urgency(t)}">
     <button class="check" data-toggle="${t.id}" aria-label="Toggle done">
@@ -493,7 +501,7 @@ function card(t) {
     </button>
     <div class="t-main">
       <div class="t-title">${esc(t.title)}</div>
-      <div class="t-meta">${who}${clsTag}${due}</div>
+      <div class="t-meta">${who}${clsTag}${due}${added}</div>
       ${notes}
     </div>
     <div class="t-actions">
