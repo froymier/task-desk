@@ -562,7 +562,14 @@ function render() {
   } else if (sortMode === "project") {
     const groups = {};
     shown.forEach(t => { const k = t.project || "No project"; (groups[k] ||= []).push(t); });
-    list.innerHTML = Object.keys(groups).sort((a,b)=> a==="No project"?1:b==="No project"?-1:a.localeCompare(b))
+    const allDone = k => groups[k].every(t => t.done);
+    list.innerHTML = Object.keys(groups).sort((a,b)=> {
+        if (a==="No project") return 1;            // loose tasks always last
+        if (b==="No project") return -1;
+        const ad = allDone(a), bd = allDone(b);
+        if (ad !== bd) return ad ? 1 : -1;          // finished projects sink below active ones
+        return a.localeCompare(b);
+      })
       .map(k => `<div class="group-head">${esc(k)}</div>` +
         sortDue(groups[k]).map(card).join("")).join("");
   } else if (sortMode === "added") {
