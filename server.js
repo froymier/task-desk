@@ -29,7 +29,7 @@ const out = (d) => ({
   id: d._id.toString(),
   title: d.title,
   who: d.who || "",
-  cls: d.cls || "",
+  cls: Array.isArray(d.cls) ? d.cls : (d.cls ? [d.cls] : []),
   project: d.project || "",
   due: d.due || "",
   notes: d.notes || "",
@@ -45,6 +45,9 @@ function clean(body, { partial } = {}) {
   for (const k of allowed) {
     if (k in body) {
       if (k === "done") obj[k] = !!body[k];
+      else if (k === "cls") obj[k] = Array.isArray(body[k])
+        ? body[k].filter(x => typeof x === "string" && x.trim()).map(x => x.trim())
+        : (typeof body[k] === "string" && body[k].trim() ? [body[k].trim()] : []);
       else if (typeof body[k] === "string") obj[k] = body[k].trim();
       else obj[k] = body[k];
     }
@@ -52,7 +55,7 @@ function clean(body, { partial } = {}) {
   if (!partial) {
     obj.title = (obj.title || "").trim();
     obj.who = obj.who || "";
-    obj.cls = obj.cls || "";
+    obj.cls = Array.isArray(obj.cls) ? obj.cls : [];
     obj.project = obj.project || "";
     obj.due = obj.due || "";
     obj.notes = obj.notes || "";

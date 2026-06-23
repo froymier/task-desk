@@ -189,6 +189,14 @@
     transition: .15s;
   }
   .field textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
+  .chips-select { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip-opt {
+    font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer;
+    border: 1px solid var(--line-strong); background: var(--paper); color: var(--muted);
+    padding: 6px 11px; border-radius: 999px; transition: .12s;
+  }
+  .chip-opt:hover { border-color: var(--accent); color: var(--ink); }
+  .chip-opt.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px var(--accent-soft); }
   .row2 { display: flex; gap: 11px; }
   .row2 .field { flex: 1; }
@@ -303,24 +311,23 @@
       </select>
     </div>
     <div class="field">
-      <label for="f-class">Class <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
-      <select id="f-class">
-        <option value="">No class</option>
-        <option>PLC Programming</option>
-        <option>Computer Programming</option>
-        <option>HMI / SCADA</option>
-        <option>Schematics / Panels</option>
-        <option>BOMs / Parts</option>
-        <option>Networking</option>
-        <option>Testing and Troubleshooting</option>
-        <option>Documentation</option>
-        <option>Retrofits</option>
-        <option>Service</option>
-      </select>
+      <label>Class <span style="font-weight:400;text-transform:none;letter-spacing:0">(select any that apply)</span></label>
+      <div id="f-class" class="chips-select">
+        <button type="button" class="chip-opt" data-val="PLC Programming">PLC Programming</button>
+        <button type="button" class="chip-opt" data-val="Computer Programming">Computer Programming</button>
+        <button type="button" class="chip-opt" data-val="HMI / SCADA">HMI / SCADA</button>
+        <button type="button" class="chip-opt" data-val="Schematics / Panels">Schematics / Panels</button>
+        <button type="button" class="chip-opt" data-val="BOMs / Parts">BOMs / Parts</button>
+        <button type="button" class="chip-opt" data-val="Networking">Networking</button>
+        <button type="button" class="chip-opt" data-val="Testing and Troubleshooting">Testing and Troubleshooting</button>
+        <button type="button" class="chip-opt" data-val="Documentation">Documentation</button>
+        <button type="button" class="chip-opt" data-val="Retrofits">Retrofits</button>
+        <button type="button" class="chip-opt" data-val="Service">Service</button>
+      </div>
     </div>
     <div class="field">
       <label for="f-project">Project <span style="font-weight:400;text-transform:none;letter-spacing:0">(pick one or type a new one)</span></label>
-      <input id="f-project" list="projects" placeholder="e.g. Line 3 Upgrade" autocomplete="off" />
+      <input id="f-project" list="projects" placeholder="e.g. Line 3 Upgrade" />
       <datalist id="projects"></datalist>
     </div>
     <div class="field">
@@ -470,6 +477,13 @@ function colorFor(name) {
 }
 const initials = n => !n ? "?" : n.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
 const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// classes can be a list (or a legacy single string) — always work with an array
+const asClasses = (cls) => Array.isArray(cls) ? cls : (cls ? [cls] : []);
+const getSelectedClasses = () => [...document.querySelectorAll('#f-class .chip-opt.on')].map(b => b.dataset.val);
+function setSelectedClasses(arr) {
+  const set = new Set(arr || []);
+  document.querySelectorAll('#f-class .chip-opt').forEach(b => b.classList.toggle('on', set.has(b.dataset.val)));
+}
 
 /* ---------- render ---------- */
 function render() {
@@ -555,7 +569,11 @@ function render() {
         sortDue(groups[k]).map(card).join("")).join("");
   } else if (sortMode === "class") {
     const groups = {};
-    shown.forEach(t => { const k = t.cls || "No class"; (groups[k] ||= []).push(t); });
+    shown.forEach(t => {
+      const cs = asClasses(t.cls);
+      if (cs.length === 0) (groups["No class"] ||= []).push(t);
+      else cs.forEach(c => (groups[c] ||= []).push(t));
+    });
     list.innerHTML = Object.keys(groups).sort((a,b)=> a==="No class"?1:b==="No class"?-1:a.localeCompare(b))
       .map(k => `<div class="group-head">${esc(k)}</div>` +
         sortDue(groups[k]).map(card).join("")).join("");
@@ -591,7 +609,7 @@ function card(t) {
   const who = t.who ? `<span class="who"><span class="avatar" style="background:${colorFor(t.who)}">${initials(t.who)}</span>${esc(t.who)}</span>` : "";
   const cal = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`;
   const due = `<span class="due" style="color:${urgency(t)}">${cal}${dueLabel(t.due)}</span>`;
-  const clsTag = t.cls ? `<span class="cls-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>${esc(t.cls)}</span>` : "";
+  const clsTag = asClasses(t.cls).map(c => `<span class="cls-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>${esc(c)}</span>`).join("");
   const added = t.createdAt ? `<span class="added">${addedLabel(t.createdAt)}</span>` : "";
   const doneAt = (t.done && t.completedAt) ? `<span class="doneat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>${doneLabel(t.completedAt)}</span>` : "";
   const proj = t.project ? `<span class="proj-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l10-4 10 4-10 4z"/><path d="M2 7v10l10 4 10-4V7"/><path d="M12 11v10"/></svg>${esc(t.project)}</span>` : "";
@@ -627,7 +645,7 @@ function openModal(t, asCopy) {
   $("#saveBtn").textContent = editing ? "Save changes" : "Add task";
   $("#f-title").value = t ? t.title : "";
   $("#f-who").value = t ? (t.who||"") : (personFilter || ME);
-  $("#f-class").value = t ? (t.cls||"") : "";
+  setSelectedClasses(t ? asClasses(t.cls) : []);
   $("#f-project").value = t ? (t.project||"") : "";
   $("#f-due").value = t ? (t.due||"") : "";
   $("#f-notes").value = t ? (t.notes||"") : "";
@@ -639,7 +657,7 @@ function closeModal() { $("#scrim").classList.remove("open"); editingId = null; 
 async function saveTask() {
   const title = $("#f-title").value.trim();
   if (!title) { $("#f-title").focus(); return; }
-  const data = { title, who: $("#f-who").value.trim(), cls: $("#f-class").value.trim(), project: $("#f-project").value.trim(), due: $("#f-due").value || "", notes: $("#f-notes").value.trim() };
+  const data = { title, who: $("#f-who").value.trim(), cls: getSelectedClasses(), project: $("#f-project").value.trim(), due: $("#f-due").value || "", notes: $("#f-notes").value.trim() };
   const btn = $("#saveBtn"); const label = btn.textContent;
   btn.disabled = true; btn.textContent = "Saving…";
   try {
@@ -662,6 +680,9 @@ async function saveTask() {
 $("#openAdd").onclick = () => openModal(null);
 $("#cancelBtn").onclick = closeModal;
 $("#saveBtn").onclick = saveTask;
+$("#f-class").addEventListener("click", e => {
+  const b = e.target.closest(".chip-opt"); if (b) b.classList.toggle("on");
+});
 $("#scrim").addEventListener("click", e => { if (e.target.id === "scrim") closeModal(); });
 $("#f-title").addEventListener("keydown", e => { if (e.key==="Enter") saveTask(); });
 document.addEventListener("keydown", e => { if (e.key==="Escape") closeModal(); });
@@ -745,9 +766,14 @@ list.addEventListener("click", async e => {
 function showLogin() {
   $("#authScrim").hidden = false;
   $("#signoutBtn").hidden = true;
+  $("#login-pass").disabled = false;
   setTimeout(() => $("#login-user").focus(), 60);
 }
-function hideLogin() { $("#authScrim").hidden = true; }
+function hideLogin() {
+  $("#authScrim").hidden = true;
+  $("#login-pass").value = "";
+  $("#login-pass").disabled = true;   // no active password field while using the app
+}
 
 async function doLogin() {
   const username = $("#login-user").value;
