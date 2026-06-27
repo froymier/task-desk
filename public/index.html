@@ -440,7 +440,7 @@ let personFilter = null;
 let weekOnly = false;
 let archiveView = false;
 let hideDone = false;
-let view = "dashboard";   // "tasks" | "dashboard"
+let view = readView();   // "tasks" | "dashboard" — restored from last visit
 let editingId = null;
 
 const PALETTE = ["#136F63","#B45309","#7C3AED","#C2410C","#0E7490","#9D174D","#4D7C0F","#1D4ED8","#92400E","#0F766E"];
@@ -824,13 +824,21 @@ async function saveTask() {
 /* ---------- events ---------- */
 $("#openAdd").onclick = () => openModal(null);
 
+function readView() {
+  try { const v = localStorage.getItem("taskdesk:view"); return v === "tasks" || v === "dashboard" ? v : "dashboard"; }
+  catch (e) { return "dashboard"; }
+}
+function saveView(v) { try { localStorage.setItem("taskdesk:view", v); } catch (e) {} }
+
 function setView(v) {
   view = v;
+  saveView(v);
   $("#tasksView").hidden = (v !== "tasks");
   $("#dashboard").hidden = (v !== "dashboard");
   [...$("#tabs").children].forEach(b => b.setAttribute("aria-pressed", b.dataset.view === v));
   if (v === "dashboard") renderDashboard();
 }
+setView(view);   // sync the DOM to the restored tab on startup
 $("#tabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (b) setView(b.dataset.view);
 });
