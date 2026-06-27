@@ -569,8 +569,8 @@ function render() {
     const done = active.length - open.length;
     const pct = n => open.length ? Math.round(n/open.length*100) : 0;
     sum.innerHTML = `<b>${open.length}</b> open` +
-      ` · <span class="over-count"><b>${overdue}</b> overdue (${pct(overdue)}%)</span>` +
-      ` · <span style="color:var(--soon)"><b>${dueWeek}</b> due this week (${pct(dueWeek)}%)</span>` +
+      ` · <span class="over-count"><b>${overdue}</b> over (${pct(overdue)}%)</span>` +
+      ` · <span style="color:var(--soon)"><b>${dueWeek}</b> this week (${pct(dueWeek)}%)</span>` +
       ` · <b>${done}</b> done` +
       (archivedTasks.length ? ` · <span style="color:var(--none)">${archivedTasks.length} archived</span>` : "");
   }
