@@ -301,11 +301,11 @@
   </header>
 
   <div class="tabs" id="tabs">
-    <button data-view="tasks" aria-pressed="true">Tasks</button>
-    <button data-view="dashboard" aria-pressed="false">Dashboard</button>
+    <button data-view="dashboard" aria-pressed="true">Dashboard</button>
+    <button data-view="tasks" aria-pressed="false">Tasks</button>
   </div>
 
-  <div id="tasksView">
+  <div id="tasksView" hidden>
   <div class="toolbar">
     <div class="seg" id="sortSeg">
       <button data-sort="due" aria-pressed="false">By deadline</button>
@@ -338,7 +338,7 @@
   <div id="list"><div class="loading">Loading your tasks…</div></div>
   </div>
 
-  <div id="dashboard" hidden></div>
+  <div id="dashboard"></div>
 </div>
 
 <!-- modal -->
@@ -440,7 +440,7 @@ let personFilter = null;
 let weekOnly = false;
 let archiveView = false;
 let hideDone = false;
-let view = "tasks";   // "tasks" | "dashboard"
+let view = "dashboard";   // "tasks" | "dashboard"
 let editingId = null;
 
 const PALETTE = ["#136F63","#B45309","#7C3AED","#C2410C","#0E7490","#9D174D","#4D7C0F","#1D4ED8","#92400E","#0F766E"];
@@ -564,9 +564,14 @@ function render() {
     sum.textContent = "No tasks yet — add the first one to start tracking.";
   } else {
     const open = active.filter(t=>!t.done);
-    const overdue = open.filter(t=>dayDiff(t.due)!==null && dayDiff(t.due)<0).length;
-    sum.innerHTML = `<b>${open.length}</b> open · <b>${active.length-open.length}</b> done` +
-      (overdue ? ` · <span class="over-count"><b>${overdue}</b> overdue</span>` : "") +
+    const overdue = open.filter(t=>{const d=dayDiff(t.due);return d!==null&&d<0;}).length;
+    const dueWeek = open.filter(t=>{const d=dayDiff(t.due);return d!==null&&d>=0&&d<=7;}).length;
+    const done = active.length - open.length;
+    const pct = n => open.length ? Math.round(n/open.length*100) : 0;
+    sum.innerHTML = `<b>${open.length}</b> open` +
+      ` · <span class="over-count"><b>${overdue}</b> overdue (${pct(overdue)}%)</span>` +
+      ` · <span style="color:var(--soon)"><b>${dueWeek}</b> due this week (${pct(dueWeek)}%)</span>` +
+      ` · <b>${done}</b> done` +
       (archivedTasks.length ? ` · <span style="color:var(--none)">${archivedTasks.length} archived</span>` : "");
   }
 
@@ -700,20 +705,6 @@ function renderDashboard() {
   const month = Date.now() - 30 * 86400000;
   const done30 = active.filter(t => t.done && t.completedAt && t.completedAt >= month);
 
-  // headline numbers
-  const stats = `
-    <div class="dash-stats">
-      <div class="stat"><div class="stat-num">${openTasks.length}</div><div class="stat-label">Open</div></div>
-      <div class="stat over"><div class="stat-num">${overdue.length}</div><div class="stat-label">Overdue</div></div>
-      <div class="stat soon"><div class="stat-num">${dueWeek.length}</div><div class="stat-label">Due this week</div></div>
-      <div class="stat ok"><div class="stat-num">${done30.length}</div><div class="stat-label">Done · 30 days</div></div>
-    </div>`;
-
-  // percentage breakdown of open work
-  const pct = n => openTasks.length ? Math.round(n / openTasks.length * 100) : 0;
-  const note = openTasks.length ? `
-    <div class="dash-note">Of <b>${openTasks.length}</b> open: <span class="n-over"><b>${pct(overdue.length)}%</b> overdue</span> · <span class="n-soon"><b>${pct(dueWeek.length)}%</b> due this week</span> · <b>${pct(openLater.length)}%</b> later</div>` : "";
-
   // status donut (mutually exclusive slices)
   const statusPie = donut([
     { label: "Overdue", value: overdue.length, color: "#C2410C" },
@@ -739,7 +730,7 @@ function renderDashboard() {
   // progress by project — vertical bars
   const byProj = {};
   active.forEach(t => { const p = t.project; if (!p) return; (byProj[p] ||= {done:0, total:0}); byProj[p].total++; if (t.done) byProj[p].done++; });
-  const projRows = Object.entries(byProj).sort((a,b)=> (a[1].done/a[1].total) - (b[1].done/b[1].total));
+  const projRows = Object.entries(byProj).sort((a,b)=> (b[1].done/b[1].total) - (a[1].done/a[1].total));
   const projects = projRows.length ? `
     <div class="dash-section">
       <div class="dash-h">Progress by project</div>
@@ -756,7 +747,7 @@ function renderDashboard() {
       </div>
     </div>` : "";
 
-  dash.innerHTML = stats + note + pies + projects;
+  dash.innerHTML = pies + projects;
 }
 
 function card(t) {
