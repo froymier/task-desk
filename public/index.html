@@ -66,6 +66,10 @@
   .stat.over .stat-num { color: var(--over); }
   .stat.soon .stat-num { color: var(--soon); }
   .stat.ok .stat-num { color: var(--ok); }
+  .dash-note { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 15px; margin: -10px 0 22px; font-size: 13.5px; color: var(--muted); box-shadow: var(--shadow); }
+  .dash-note b { color: var(--ink); font-weight: 600; }
+  .dash-note .n-over b { color: var(--over); }
+  .dash-note .n-soon b { color: var(--soon); }
 
   .dash-section { margin-bottom: 22px; }
   .dash-h { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--muted); margin: 0 4px 10px; }
@@ -705,11 +709,16 @@ function renderDashboard() {
       <div class="stat ok"><div class="stat-num">${done30.length}</div><div class="stat-label">Done · 30 days</div></div>
     </div>`;
 
+  // percentage breakdown of open work
+  const pct = n => openTasks.length ? Math.round(n / openTasks.length * 100) : 0;
+  const note = openTasks.length ? `
+    <div class="dash-note">Of <b>${openTasks.length}</b> open: <span class="n-over"><b>${pct(overdue.length)}%</b> overdue</span> · <span class="n-soon"><b>${pct(dueWeek.length)}%</b> due this week</span> · <b>${pct(openLater.length)}%</b> later</div>` : "";
+
   // status donut (mutually exclusive slices)
   const statusPie = donut([
     { label: "Overdue", value: overdue.length, color: "#C2410C" },
     { label: "Due this week", value: dueWeek.length, color: "#B45309" },
-    { label: "Open", value: openLater.length, color: "#0E7490" },
+    { label: "Open · later", value: openLater.length, color: "#0E7490" },
     { label: "Done", value: active.filter(t=>t.done).length, color: "#2F7A43" },
   ], "tasks");
 
@@ -730,7 +739,7 @@ function renderDashboard() {
   // progress by project — vertical bars
   const byProj = {};
   active.forEach(t => { const p = t.project; if (!p) return; (byProj[p] ||= {done:0, total:0}); byProj[p].total++; if (t.done) byProj[p].done++; });
-  const projRows = Object.entries(byProj).sort((a,b)=> (b[1].total-b[1].done) - (a[1].total-a[1].done));
+  const projRows = Object.entries(byProj).sort((a,b)=> (a[1].done/a[1].total) - (b[1].done/b[1].total));
   const projects = projRows.length ? `
     <div class="dash-section">
       <div class="dash-h">Progress by project</div>
@@ -747,7 +756,7 @@ function renderDashboard() {
       </div>
     </div>` : "";
 
-  dash.innerHTML = stats + pies + projects;
+  dash.innerHTML = stats + note + pies + projects;
 }
 
 function card(t) {
