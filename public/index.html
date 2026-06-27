@@ -73,28 +73,26 @@
   .dash-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 620px) { .dash-cols { grid-template-columns: 1fr; gap: 0; } }
 
-  .wl-row { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-  .wl-row:last-child { border-bottom: 0; }
-  .wl-name { font-size: 13.5px; font-weight: 500; width: 84px; flex: 0 0 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .wl-bar { flex: 1; height: 9px; background: var(--paper); border-radius: 999px; overflow: hidden; }
-  .wl-open { height: 100%; background: var(--accent); border-radius: 999px; display: flex; justify-content: flex-end; }
-  .wl-over { height: 100%; background: var(--over); }
-  .wl-nums { font-size: 12.5px; color: var(--muted); width: 92px; flex: 0 0 auto; text-align: right; }
-  .wl-nums .over { color: var(--over); font-weight: 600; }
+  /* donut charts */
+  .pie-wrap { display: flex; align-items: center; gap: 18px; padding: 8px 0; flex-wrap: wrap; }
+  .pie { position: relative; width: 132px; height: 132px; border-radius: 50%; flex: 0 0 auto; }
+  .pie-hole { position: absolute; inset: 24%; background: var(--panel); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .pie-total { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 24px; line-height: 1; }
+  .pie-cap { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+  .legend { display: flex; flex-direction: column; gap: 7px; flex: 1; min-width: 130px; }
+  .lg-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); }
+  .lg-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .lg-item b { margin-left: auto; font-weight: 600; }
+  .pie-empty { color: var(--muted); font-size: 13px; padding: 30px 2px; text-align: center; width: 100%; }
 
-  .pj-row { padding: 11px 0; border-bottom: 1px solid var(--line); }
-  .pj-row:last-child { border-bottom: 0; }
-  .pj-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; margin-bottom: 7px; }
-  .pj-head .pj-name { font-weight: 500; }
-  .pj-frac { font-size: 12px; color: var(--muted); }
-  .pj-bar { height: 9px; background: var(--paper); border-radius: 999px; overflow: hidden; }
-  .pj-fill { height: 100%; background: var(--ok); border-radius: 999px; transition: width .3s; }
-
-  .mini { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; padding: 10px 2px; font: inherit; transition: .12s; }
-  .mini:last-child { border-bottom: 0; }
-  .mini:hover { background: var(--paper); }
-  .mini-title { display: block; font-size: 13.5px; font-weight: 500; color: var(--ink); }
-  .mini-meta { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+  /* vertical bar (column) chart */
+  .col-chart { display: flex; align-items: flex-end; gap: 14px; padding: 8px 2px 0; overflow-x: auto; }
+  .col-item { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 54px; flex: 1 0 54px; }
+  .col-val { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .col-track { width: 30px; height: 120px; background: var(--paper); border-radius: 6px; display: flex; align-items: flex-end; overflow: hidden; }
+  .col-fill { width: 100%; background: var(--ok); border-radius: 6px 6px 0 0; transition: height .3s; min-height: 3px; }
+  .col-name { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.25; max-width: 64px; }
+  .col-frac { font-size: 10px; color: var(--none); }
   .dash-empty { color: var(--muted); font-size: 13px; padding: 14px 2px; }
 
   /* ---- toolbar ---- */
@@ -365,7 +363,8 @@
         <option>Marcelo</option>
         <option>Franco</option>
         <option>Aaron</option>
-        <option>Ale</option>
+        <option>Jack</option>
+        <option>Clay</option>
       </select>
     </div>
     <div class="field">
@@ -668,44 +667,67 @@ function sortDue(arr) {
 }
 
 /* ---------- dashboard ---------- */
+function donut(segments, totalLabel) {
+  const total = segments.reduce((s,x)=>s+x.value, 0);
+  if (total === 0) return `<div class="pie-empty">No data yet.</div>`;
+  let acc = 0;
+  const stops = segments.filter(s=>s.value>0).map(s => {
+    const start = acc/total*100; acc += s.value; const end = acc/total*100;
+    return `${s.color} ${start}% ${end}%`;
+  }).join(", ");
+  const legend = segments.filter(s=>s.value>0).map(s =>
+    `<div class="lg-item"><span class="lg-dot" style="background:${s.color}"></span>${esc(s.label)}<b>${s.value}</b></div>`).join("");
+  return `<div class="pie-wrap">
+    <div class="pie" style="background:conic-gradient(${stops})"><div class="pie-hole"><span class="pie-total">${total}</span><span class="pie-cap">${totalLabel}</span></div></div>
+    <div class="legend">${legend}</div>
+  </div>`;
+}
+
 function renderDashboard() {
   const dash = $("#dashboard");
   const archKeys = archivedProjectKeys();
   const active = tasks.filter(t => !archKeys.has(projKey(t)));
-  const open = active.filter(t => !t.done);
-  const overdue = open.filter(t => { const d = dayDiff(t.due); return d !== null && d < 0; });
-  const dueWeek = open.filter(t => { const d = dayDiff(t.due); return d !== null && d >= 0 && d <= 7; });
+  const openTasks = active.filter(t => !t.done);
+  const isOverdue = t => { const d = dayDiff(t.due); return d !== null && d < 0; };
+  const isWeek = t => { const d = dayDiff(t.due); return d !== null && d >= 0 && d <= 7; };
+  const overdue = openTasks.filter(isOverdue);
+  const dueWeek = openTasks.filter(isWeek);
+  const openLater = openTasks.filter(t => !isOverdue(t) && !isWeek(t));
   const month = Date.now() - 30 * 86400000;
-  const completed30 = active.filter(t => t.done && t.completedAt && t.completedAt >= month);
+  const done30 = active.filter(t => t.done && t.completedAt && t.completedAt >= month);
 
   // headline numbers
   const stats = `
     <div class="dash-stats">
-      <div class="stat"><div class="stat-num">${open.length}</div><div class="stat-label">Open</div></div>
+      <div class="stat"><div class="stat-num">${openTasks.length}</div><div class="stat-label">Open</div></div>
       <div class="stat over"><div class="stat-num">${overdue.length}</div><div class="stat-label">Overdue</div></div>
       <div class="stat soon"><div class="stat-num">${dueWeek.length}</div><div class="stat-label">Due this week</div></div>
-      <div class="stat ok"><div class="stat-num">${completed30.length}</div><div class="stat-label">Done · 30 days</div></div>
+      <div class="stat ok"><div class="stat-num">${done30.length}</div><div class="stat-label">Done · 30 days</div></div>
     </div>`;
 
-  // workload by person
-  const byPerson = {};
-  open.forEach(t => { const k = t.who || "Unassigned"; (byPerson[k] ||= {open:0, over:0}); byPerson[k].open++; if (dayDiff(t.due)!==null && dayDiff(t.due)<0) byPerson[k].over++; });
-  const peopleRows = Object.entries(byPerson).sort((a,b)=> b[1].open - a[1].open);
-  const maxOpen = Math.max(1, ...peopleRows.map(r => r[1].open));
-  const workload = peopleRows.length ? `
-    <div class="dash-section">
-      <div class="dash-h">Workload by person</div>
-      <div class="dash-card">
-        ${peopleRows.map(([name, s]) => `
-          <div class="wl-row">
-            <span class="wl-name">${esc(name)}</span>
-            <div class="wl-bar"><div class="wl-open" style="width:${Math.round(s.open/maxOpen*100)}%">${s.over?`<div class="wl-over" style="width:${Math.round(s.over/s.open*100)}%"></div>`:""}</div></div>
-            <span class="wl-nums">${s.open} open${s.over?` · <span class="over">${s.over} overdue</span>`:""}</span>
-          </div>`).join("")}
-      </div>
-    </div>` : "";
+  // status donut (mutually exclusive slices)
+  const statusPie = donut([
+    { label: "Overdue", value: overdue.length, color: "#C2410C" },
+    { label: "Due this week", value: dueWeek.length, color: "#B45309" },
+    { label: "Open", value: openLater.length, color: "#0E7490" },
+    { label: "Done", value: active.filter(t=>t.done).length, color: "#2F7A43" },
+  ], "tasks");
 
-  // progress by project (named projects with active tasks)
+  // person load donut (share of open tasks)
+  const byPerson = {};
+  openTasks.forEach(t => { const k = t.who || "Unassigned"; byPerson[k] = (byPerson[k]||0) + 1; });
+  const personSegs = Object.entries(byPerson)
+    .sort((a,b)=> b[1]-a[1])
+    .map(([name, v]) => ({ label: name, value: v, color: name==="Unassigned" ? "var(--none)" : colorFor(name) }));
+  const personPie = donut(personSegs, "open");
+
+  const pies = `
+    <div class="dash-cols">
+      <div class="dash-section"><div class="dash-h">Task status</div><div class="dash-card">${statusPie}</div></div>
+      <div class="dash-section"><div class="dash-h">Person load (open tasks)</div><div class="dash-card">${personPie}</div></div>
+    </div>`;
+
+  // progress by project — vertical bars
   const byProj = {};
   active.forEach(t => { const p = t.project; if (!p) return; (byProj[p] ||= {done:0, total:0}); byProj[p].total++; if (t.done) byProj[p].done++; });
   const projRows = Object.entries(byProj).sort((a,b)=> (b[1].total-b[1].done) - (a[1].total-a[1].done));
@@ -713,31 +735,19 @@ function renderDashboard() {
     <div class="dash-section">
       <div class="dash-h">Progress by project</div>
       <div class="dash-card">
-        ${projRows.map(([name, s]) => { const pct = Math.round(s.done/s.total*100); return `
-          <div class="pj-row">
-            <div class="pj-head"><span class="pj-name">${esc(name)}</span><span class="pj-frac">${s.done}/${s.total} done · ${pct}%</span></div>
-            <div class="pj-bar"><div class="pj-fill" style="width:${pct}%"></div></div>
-          </div>`; }).join("")}
+        <div class="col-chart">
+          ${projRows.map(([name, s]) => { const pct = Math.round(s.done/s.total*100); return `
+            <div class="col-item">
+              <div class="col-val">${pct}%</div>
+              <div class="col-track"><div class="col-fill" style="height:${pct}%"></div></div>
+              <div class="col-frac">${s.done}/${s.total}</div>
+              <div class="col-name">${esc(name)}</div>
+            </div>`; }).join("")}
+        </div>
       </div>
     </div>` : "";
 
-  // overdue + due this week lists
-  const miniRow = t => `<button class="mini" data-edit="${t.id}"><span class="mini-title">${esc(t.title)}</span><span class="mini-meta">${esc(t.who||"Unassigned")} · ${dueLabel(t.due)}</span></button>`;
-  const overSorted = overdue.slice().sort((a,b)=> dayDiff(a.due)-dayDiff(b.due));
-  const weekSorted = dueWeek.slice().sort((a,b)=> dayDiff(a.due)-dayDiff(b.due));
-  const lists = `
-    <div class="dash-cols">
-      <div class="dash-section">
-        <div class="dash-h">Overdue</div>
-        <div class="dash-card">${overSorted.length ? overSorted.map(miniRow).join("") : `<div class="dash-empty">Nothing overdue.</div>`}</div>
-      </div>
-      <div class="dash-section">
-        <div class="dash-h">Due this week</div>
-        <div class="dash-card">${weekSorted.length ? weekSorted.map(miniRow).join("") : `<div class="dash-empty">Nothing due in the next 7 days.</div>`}</div>
-      </div>
-    </div>`;
-
-  dash.innerHTML = stats + workload + projects + lists;
+  dash.innerHTML = stats + pies + projects;
 }
 
 function card(t) {
