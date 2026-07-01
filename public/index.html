@@ -1,6 +1,11 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Task Desk</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#136F63" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Task Desk" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -267,6 +272,16 @@
   .signout:hover { color: var(--ink); border-color: var(--line-strong); }
   .signout[hidden] { display: none; }
   .signout svg { width: 15px; height: 15px; }
+  .head-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex: 0 0 auto; }
+  .refresh {
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    border: 1px solid var(--line); background: var(--panel); cursor: pointer; color: var(--muted);
+    width: 36px; height: 36px; border-radius: 50%; transition: .15s; padding: 0;
+  }
+  .refresh:hover { color: var(--ink); border-color: var(--line-strong); }
+  .refresh svg { width: 16px; height: 16px; }
+  .refresh.spinning svg { animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .auth-scrim {
     position: fixed; inset: 0; background: var(--paper); z-index: 100;
@@ -293,10 +308,15 @@
         <h1>Task Desk</h1>
         <p class="summary" id="summary">Loading…</p>
       </div>
-      <button class="signout" id="signoutBtn" hidden>
-        <span id="whoami"></span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
-      </button>
+      <div class="head-actions">
+        <button class="refresh" id="refreshBtn" aria-label="Refresh" title="Refresh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        </button>
+        <button class="signout" id="signoutBtn" hidden>
+          <span id="whoami"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -980,6 +1000,12 @@ function startSession(name) {
 $("#login-btn").onclick = doLogin;
 $("#login-pass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
 $("#signoutBtn").onclick = doLogout;
+$("#refreshBtn").onclick = async () => {
+  const btn = $("#refreshBtn");
+  if (btn.classList.contains("spinning")) return;
+  btn.classList.add("spinning");
+  try { await load(); } finally { btn.classList.remove("spinning"); }
+};
 
 async function init() {
   try {
@@ -990,4 +1016,11 @@ async function init() {
 }
 
 init();
+
+// Register the service worker (enables "Install app")
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
 </script>
