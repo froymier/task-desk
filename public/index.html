@@ -104,6 +104,38 @@
   .col-frac { font-size: 10px; color: var(--none); }
   .dash-empty { color: var(--muted); font-size: 13px; padding: 14px 2px; }
 
+  /* ---- calendar ---- */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
+  .cal-title { font-family: "Bricolage Grotesque", sans-serif; font-weight: 700; font-size: 20px; letter-spacing: -.01em; }
+  .cal-nav { display: inline-flex; gap: 6px; align-items: center; }
+  .cal-nav button { border: 1px solid var(--line); background: var(--panel); cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); height: 34px; border-radius: 9px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; transition: .15s; }
+  .cal-nav button:hover { border-color: var(--line-strong); background: var(--paper); }
+  .cal-nav .cal-arrow { width: 34px; padding: 0; }
+  .cal-nav svg { width: 16px; height: 16px; }
+
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-dow { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; text-align: center; padding: 2px 0 4px; }
+  .cal-cell { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; min-height: 92px; padding: 5px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+  .cal-cell.blank { background: transparent; border: 0; }
+  .cal-cell[data-day] { cursor: pointer; }
+  .cal-cell[data-day]:hover { border-color: var(--line-strong); }
+  .cal-daynum { font-size: 12px; font-weight: 600; color: var(--muted); padding: 1px 2px; }
+  .cal-today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .cal-today .cal-daynum { color: var(--accent); }
+  .cal-chip { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 500; padding: 2px 6px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: .1s; }
+  .cal-chip.over { background: #FDE7DD; color: var(--over); }
+  .cal-chip.soon { background: #FBF0DA; color: var(--soon); }
+  .cal-chip.ok { background: var(--accent-soft); color: var(--accent); }
+  .cal-chip.done { background: var(--paper); color: var(--none); text-decoration: line-through; }
+  .cal-chip:hover { filter: brightness(.96); }
+  .cal-more { font-size: 10.5px; color: var(--muted); padding: 0 4px; }
+  @media (max-width: 560px) {
+    .cal-grid { gap: 3px; }
+    .cal-cell { min-height: 66px; padding: 3px; border-radius: 7px; }
+    .cal-chip { font-size: 10px; padding: 1px 4px; }
+    .cal-dow { font-size: 9px; }
+  }
+
   /* ---- toolbar ---- */
   .toolbar {
     display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
@@ -323,6 +355,7 @@
   <div class="tabs" id="tabs">
     <button data-view="dashboard" aria-pressed="true">Dashboard</button>
     <button data-view="tasks" aria-pressed="false">Tasks</button>
+    <button data-view="calendar" aria-pressed="false">Calendar</button>
   </div>
 
   <div id="tasksView" hidden>
@@ -359,6 +392,8 @@
   </div>
 
   <div id="dashboard"></div>
+
+  <div id="calendarView" hidden></div>
 </div>
 
 <!-- modal -->
@@ -572,6 +607,7 @@ function setSelectedClasses(arr) {
 /* ---------- render ---------- */
 function render() {
   if (view === "dashboard") renderDashboard();
+  if (view === "calendar") renderCalendar();
   const archKeys = archivedProjectKeys();
   const isArch = t => archKeys.has(projKey(t));
   const active = tasks.filter(t => !isArch(t));
@@ -770,6 +806,58 @@ function renderDashboard() {
   dash.innerHTML = pies + projects;
 }
 
+/* ---------- calendar ---------- */
+let calMonth = (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
+
+function calChipClass(t) {
+  if (t.done) return "done";
+  const d = dayDiff(t.due);
+  if (d !== null && d < 0) return "over";
+  if (d !== null && d <= 2) return "soon";
+  return "ok";
+}
+
+function renderCalendar() {
+  const el = $("#calendarView");
+  const archKeys = archivedProjectKeys();
+  const active = tasks.filter(t => !archKeys.has(projKey(t)) && t.due);
+
+  const byDate = {};
+  active.forEach(t => { (byDate[t.due] ||= []).push(t); });
+
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  const startDow = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const title = calMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => `<div class="cal-dow">${d}</div>`).join("");
+
+  let cells = "";
+  for (let i = 0; i < startDow; i++) cells += `<div class="cal-cell blank"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const dayTasks = (byDate[ds] || []).slice().sort((a,b)=> (a.done?1:0)-(b.done?1:0));
+    const shown = dayTasks.slice(0, 3);
+    const chips = shown.map(t => `<button class="cal-chip ${calChipClass(t)}" data-edit="${t.id}" title="${esc(t.title)}">${esc(t.title)}</button>`).join("");
+    const more = dayTasks.length > 3 ? `<div class="cal-more">+${dayTasks.length-3} more</div>` : "";
+    const isToday = ds === todayStr();
+    cells += `<div class="cal-cell ${isToday?"cal-today":""}" data-day="${ds}"><div class="cal-daynum">${day}</div>${chips}${more}</div>`;
+  }
+  const trail = (7 - ((startDow + daysInMonth) % 7)) % 7;
+  for (let i = 0; i < trail; i++) cells += `<div class="cal-cell blank"></div>`;
+
+  el.innerHTML = `
+    <div class="cal-head">
+      <div class="cal-title">${title}</div>
+      <div class="cal-nav">
+        <button class="cal-arrow" data-cal="prev" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button data-cal="today">Today</button>
+        <button class="cal-arrow" data-cal="next" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+    </div>
+    <div class="cal-grid">${dow}${cells}</div>`;
+}
+
 function card(t) {
   const who = t.who ? `<span class="who"><span class="avatar" style="background:${colorFor(t.who)}">${initials(t.who)}</span>${esc(t.who)}</span>` : "";
   const cal = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`;
@@ -845,7 +933,7 @@ async function saveTask() {
 $("#openAdd").onclick = () => openModal(null);
 
 function readView() {
-  try { const v = localStorage.getItem("taskdesk:view"); return v === "tasks" || v === "dashboard" ? v : "dashboard"; }
+  try { const v = localStorage.getItem("taskdesk:view"); return ["tasks","dashboard","calendar"].includes(v) ? v : "dashboard"; }
   catch (e) { return "dashboard"; }
 }
 function saveView(v) { try { localStorage.setItem("taskdesk:view", v); } catch (e) {} }
@@ -855,8 +943,10 @@ function setView(v) {
   saveView(v);
   $("#tasksView").hidden = (v !== "tasks");
   $("#dashboard").hidden = (v !== "dashboard");
+  $("#calendarView").hidden = (v !== "calendar");
   [...$("#tabs").children].forEach(b => b.setAttribute("aria-pressed", b.dataset.view === v));
   if (v === "dashboard") renderDashboard();
+  if (v === "calendar") renderCalendar();
 }
 setView(view);   // sync the DOM to the restored tab on startup
 $("#tabs").addEventListener("click", e => {
@@ -865,6 +955,20 @@ $("#tabs").addEventListener("click", e => {
 $("#dashboard").addEventListener("click", e => {
   const m = e.target.closest("[data-edit]");
   if (m) { const t = tasks.find(x=>x.id===m.dataset.edit); if (t) openModal(t); }
+});
+$("#calendarView").addEventListener("click", e => {
+  const nav = e.target.closest("[data-cal]");
+  if (nav) {
+    if (nav.dataset.cal === "prev") calMonth.setMonth(calMonth.getMonth() - 1);
+    else if (nav.dataset.cal === "next") calMonth.setMonth(calMonth.getMonth() + 1);
+    else { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); calMonth = d; }
+    renderCalendar();
+    return;
+  }
+  const chip = e.target.closest("[data-edit]");
+  if (chip) { const t = tasks.find(x=>x.id===chip.dataset.edit); if (t) openModal(t); return; }
+  const cell = e.target.closest(".cal-cell[data-day]");
+  if (cell) { openModal(null); $("#f-due").value = cell.dataset.day; }
 });
 $("#cancelBtn").onclick = closeModal;
 $("#saveBtn").onclick = saveTask;
