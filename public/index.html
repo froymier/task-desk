@@ -112,6 +112,15 @@
   .cal-nav button:hover { border-color: var(--line-strong); background: var(--paper); }
   .cal-nav .cal-arrow { width: 34px; padding: 0; }
   .cal-nav svg { width: 16px; height: 16px; }
+  .cal-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .cal-select {
+    font: inherit; font-size: 13px; color: var(--ink); border: 1px solid var(--line-strong);
+    background: var(--panel); border-radius: 9px; padding: 8px 11px; cursor: pointer; transition: .15s;
+  }
+  .cal-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .cal-modeseg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+  .cal-modeseg button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--muted); padding: 6px 14px; border-radius: 999px; transition: .15s; }
+  .cal-modeseg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
 
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .cal-dow { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; text-align: center; padding: 2px 0 4px; }
@@ -122,6 +131,8 @@
   .cal-daynum { font-size: 12px; font-weight: 600; color: var(--muted); padding: 1px 2px; }
   .cal-today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .cal-today .cal-daynum { color: var(--accent); }
+  .cal-grid.week .cal-cell { min-height: 220px; }
+  .cal-grid.week .cal-cell.blank { min-height: 0; }
   .cal-chip { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 500; padding: 2px 6px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: .1s; }
   .cal-chip.over { background: #FDE7DD; color: var(--over); }
   .cal-chip.soon { background: #FBF0DA; color: var(--soon); }
@@ -807,7 +818,9 @@ function renderDashboard() {
 }
 
 /* ---------- calendar ---------- */
-let calMonth = (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
+let calDate = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+let calMode = "month";     // "month" | "week"
+let calPerson = null;      // null = everyone
 
 function calChipClass(t) {
   if (t.done) return "done";
@@ -816,46 +829,67 @@ function calChipClass(t) {
   if (d !== null && d <= 2) return "soon";
   return "ok";
 }
+const ymd = (dt) => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+const shortDate = (dt) => dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function dayCell(dt, byDate, cap) {
+  const ds = ymd(dt);
+  const dayTasks = (byDate[ds] || []).slice().sort((a,b)=> (a.done?1:0)-(b.done?1:0));
+  const shown = dayTasks.slice(0, cap);
+  const chips = shown.map(t => `<button class="cal-chip ${calChipClass(t)}" data-edit="${t.id}" title="${esc(t.title)}">${esc(t.title)}</button>`).join("");
+  const more = dayTasks.length > cap ? `<div class="cal-more">+${dayTasks.length-cap} more</div>` : "";
+  const isToday = ds === todayStr();
+  return `<div class="cal-cell ${isToday?"cal-today":""}" data-day="${ds}"><div class="cal-daynum">${dt.getDate()}</div>${chips}${more}</div>`;
+}
 
 function renderCalendar() {
   const el = $("#calendarView");
   const archKeys = archivedProjectKeys();
-  const active = tasks.filter(t => !archKeys.has(projKey(t)) && t.due);
-
+  const active = tasks.filter(t => !archKeys.has(projKey(t)) && t.due && (!calPerson || t.who === calPerson));
   const byDate = {};
   active.forEach(t => { (byDate[t.due] ||= []).push(t); });
 
-  const y = calMonth.getFullYear(), m = calMonth.getMonth();
-  const startDow = new Date(y, m, 1).getDay();
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const title = calMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-
   const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => `<div class="cal-dow">${d}</div>`).join("");
+  let cells = "", title = "";
 
-  let cells = "";
-  for (let i = 0; i < startDow; i++) cells += `<div class="cal-cell blank"></div>`;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    const dayTasks = (byDate[ds] || []).slice().sort((a,b)=> (a.done?1:0)-(b.done?1:0));
-    const shown = dayTasks.slice(0, 3);
-    const chips = shown.map(t => `<button class="cal-chip ${calChipClass(t)}" data-edit="${t.id}" title="${esc(t.title)}">${esc(t.title)}</button>`).join("");
-    const more = dayTasks.length > 3 ? `<div class="cal-more">+${dayTasks.length-3} more</div>` : "";
-    const isToday = ds === todayStr();
-    cells += `<div class="cal-cell ${isToday?"cal-today":""}" data-day="${ds}"><div class="cal-daynum">${day}</div>${chips}${more}</div>`;
+  if (calMode === "week") {
+    const start = new Date(calDate); start.setDate(calDate.getDate() - calDate.getDay());
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    title = `${shortDate(start)} – ${shortDate(end)}, ${end.getFullYear()}`;
+    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate()+i); cells += dayCell(d, byDate, 8); }
+  } else {
+    const y = calDate.getFullYear(), m = calDate.getMonth();
+    const startDow = new Date(y, m, 1).getDay();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    title = calDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    for (let i = 0; i < startDow; i++) cells += `<div class="cal-cell blank"></div>`;
+    for (let day = 1; day <= daysInMonth; day++) cells += dayCell(new Date(y, m, day), byDate, 3);
+    const trail = (7 - ((startDow + daysInMonth) % 7)) % 7;
+    for (let i = 0; i < trail; i++) cells += `<div class="cal-cell blank"></div>`;
   }
-  const trail = (7 - ((startDow + daysInMonth) % 7)) % 7;
-  for (let i = 0; i < trail; i++) cells += `<div class="cal-cell blank"></div>`;
+
+  // person filter options (people with active tasks)
+  const people = [...new Set(tasks.filter(t => !archKeys.has(projKey(t))).map(t => t.who).filter(Boolean))].sort();
+  const personOpts = `<option value="">Everyone</option>` +
+    people.map(p => `<option value="${esc(p)}" ${calPerson===p?"selected":""}>${esc(p)}</option>`).join("");
 
   el.innerHTML = `
     <div class="cal-head">
       <div class="cal-title">${title}</div>
       <div class="cal-nav">
-        <button class="cal-arrow" data-cal="prev" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button class="cal-arrow" data-cal="prev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
         <button data-cal="today">Today</button>
-        <button class="cal-arrow" data-cal="next" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+        <button class="cal-arrow" data-cal="next" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
       </div>
     </div>
-    <div class="cal-grid">${dow}${cells}</div>`;
+    <div class="cal-controls">
+      <select id="calPersonSel" class="cal-select">${personOpts}</select>
+      <div class="cal-modeseg" id="calModeSeg">
+        <button data-mode="month" aria-pressed="${calMode==="month"}">Month</button>
+        <button data-mode="week" aria-pressed="${calMode==="week"}">Week</button>
+      </div>
+    </div>
+    <div class="cal-grid ${calMode==="week"?"week":""}">${dow}${cells}</div>`;
 }
 
 function card(t) {
@@ -959,16 +993,25 @@ $("#dashboard").addEventListener("click", e => {
 $("#calendarView").addEventListener("click", e => {
   const nav = e.target.closest("[data-cal]");
   if (nav) {
-    if (nav.dataset.cal === "prev") calMonth.setMonth(calMonth.getMonth() - 1);
-    else if (nav.dataset.cal === "next") calMonth.setMonth(calMonth.getMonth() + 1);
-    else { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); calMonth = d; }
+    const step = nav.dataset.cal;
+    if (step === "today") { const d = new Date(); d.setHours(0,0,0,0); calDate = d; }
+    else {
+      const dir = step === "next" ? 1 : -1;
+      if (calMode === "month") calDate = new Date(calDate.getFullYear(), calDate.getMonth()+dir, 1);
+      else { const d = new Date(calDate); d.setDate(d.getDate()+dir*7); calDate = d; }
+    }
     renderCalendar();
     return;
   }
+  const mode = e.target.closest("[data-mode]");
+  if (mode) { calMode = mode.dataset.mode; renderCalendar(); return; }
   const chip = e.target.closest("[data-edit]");
   if (chip) { const t = tasks.find(x=>x.id===chip.dataset.edit); if (t) openModal(t); return; }
   const cell = e.target.closest(".cal-cell[data-day]");
   if (cell) { openModal(null); $("#f-due").value = cell.dataset.day; }
+});
+$("#calendarView").addEventListener("change", e => {
+  if (e.target.id === "calPersonSel") { calPerson = e.target.value || null; renderCalendar(); }
 });
 $("#cancelBtn").onclick = closeModal;
 $("#saveBtn").onclick = saveTask;
