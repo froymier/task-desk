@@ -21,6 +21,13 @@ if (!SECRET) {
   process.exit(1);
 }
 
+// Optional: the AI assistant. If this isn't set, the app still works — the Assistant tab just reports it needs a key.
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const ASSISTANT_MODEL = "claude-haiku-4-5-20251001";
+function stripFences(s) {
+  return String(s || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+}
+
 const client = new MongoClient(uri);
 let tasks; // the MongoDB collection
 
@@ -188,6 +195,87 @@ app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: "Could not delete task" });
+  }
+});
+
+// ---- AI assistant ----
+app.post("/api/assistant", requireAuth, async (req, res) => {
+  if (!ANTHROPIC_KEY) {
+    return res.status(400).json({ error: "The assistant isn't set up yet — add ANTHROPIC_API_KEY in your host's environment settings, then redeploy." });
+  }
+  try {
+    const { message, history, classes, people } = req.body || {};
+    if (!message || !String(message).trim()) return res.status(400).json({ error: "Empty message" });
+
+    const docs = await tasks.find().sort({ createdAt: 1 }).toArray();
+    const taskList = docs.map((d) => {
+      const o = out(d);
+      return { id: o.id, title: o.title, who: o.who, cls: o.cls, project: o.project, due: o.due, done: o.done };
+    });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const dow = new Date().toLocaleDateString("en-US", { weekday: "long" });
+
+    const system = `You are the assistant built into "Task Desk", a control & automation task tracker used by a small team.
+Today is ${dow}, ${today}.
+Valid people (assignees): ${JSON.stringify(people || [])}.
+Valid classes (a task may have zero or more of these): ${JSON.stringify(classes || [])}.
+Current tasks (JSON array): ${JSON.stringify(taskList)}.
+
+You help the user capture new tasks and answer questions about the team's workload, using ONLY the task data above. Do not invent tasks that already exist. Interpret relative dates like "Friday" or "next week" into real dates based on today.
+
+Respond with ONLY a raw JSON object, no markdown fences and no text outside it:
+{"reply": string, "actions": Action[]}
+Where each Action is one of:
+{"type":"create","task":{"title":string,"who":string,"cls":string[],"project":string,"due":"YYYY-MM-DD"|"","notes":string}}
+{"type":"update","id":string,"changes":{ }}   // changes may include any of: title, who, cls (string[]), project, due, notes, done (boolean)
+Rules:
+- "who" must be exactly one of the valid people, or "" if unassigned.
+- "cls" items must be exactly from the valid classes list; use [] if none apply.
+- update "id" must be an existing task id from Current tasks.
+- Use actions ONLY when the user wants to add or change tasks. For questions, "actions" must be [].
+- Keep "reply" short and friendly. If you proposed actions, tell the user to review and Apply them.`;
+
+    const messages = [];
+    (Array.isArray(history) ? history : []).slice(-8).forEach((h) => {
+      if (h && (h.role === "user" || h.role === "assistant") && h.content) messages.push({ role: h.role, content: String(h.content) });
+    });
+    messages.push({ role: "user", content: String(message) });
+
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({ model: ASSISTANT_MODEL, max_tokens: 1024, system, messages }),
+    });
+
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      console.error("Anthropic API error", r.status, detail.slice(0, 500));
+      const msg = r.status === 401 ? "The API key was rejected — double-check ANTHROPIC_API_KEY."
+        : r.status === 429 ? "Rate limited or out of credit — check your Anthropic billing."
+        : "The assistant service returned an error.";
+      return res.status(502).json({ error: msg });
+    }
+
+    const data = await r.json();
+    const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+
+    let parsed;
+    try { parsed = JSON.parse(stripFences(text)); }
+    catch { parsed = { reply: text || "Sorry, I couldn't parse that.", actions: [] }; }
+    if (!parsed || typeof parsed !== "object") parsed = { reply: "Sorry, I couldn't parse that.", actions: [] };
+
+    res.json({
+      reply: typeof parsed.reply === "string" ? parsed.reply : "",
+      actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+    });
+  } catch (e) {
+    console.error("assistant error", e);
+    res.status(500).json({ error: "The assistant failed to respond." });
   }
 });
 

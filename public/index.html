@@ -133,6 +133,36 @@
   .cal-today .cal-daynum { color: var(--accent); }
   .cal-grid.week .cal-cell { min-height: 220px; }
   .cal-grid.week .cal-cell.blank { min-height: 0; }
+
+  /* ---- assistant ---- */
+  .asst { display: flex; flex-direction: column; height: calc(100vh - 220px); min-height: 380px; }
+  .asst-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 12px; }
+  .asst-intro { text-align: center; color: var(--muted); padding: 30px 16px; }
+  .asst-intro-h { font-family: "Bricolage Grotesque", sans-serif; font-size: 18px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+  .asst-eg { font-size: 13px; line-height: 1.7; }
+  .asst-msg { max-width: 82%; font-size: 14px; line-height: 1.5; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
+  .asst-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+  .asst-msg.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 5px; box-shadow: var(--shadow); }
+  .asst-msg.thinking { color: var(--muted); font-style: italic; }
+  .asst-card { align-self: flex-start; max-width: 82%; background: var(--panel); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .asst-card-kind { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 5px; }
+  .asst-card-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .asst-card-meta { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+  .asst-card-actions { display: flex; gap: 8px; margin-top: 11px; }
+  .asst-card-actions button { font: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer; transition: .15s; border: 0; }
+  .asst-apply { background: var(--accent); color: #fff; }
+  .asst-apply:hover { filter: brightness(1.07); }
+  .asst-dismiss { background: var(--paper); border: 1px solid var(--line-strong) !important; color: var(--muted); }
+  .asst-applied { color: var(--ok); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+  .asst-card.done { opacity: .7; border-left-color: var(--ok); }
+  .asst-err { align-self: center; color: var(--over); font-size: 13px; }
+  .asst-input { display: flex; gap: 8px; align-items: flex-end; padding-top: 10px; border-top: 1px solid var(--line); }
+  .asst-input textarea { flex: 1; font: inherit; font-size: 14px; color: var(--ink); border: 1px solid var(--line-strong); border-radius: 12px; padding: 11px 14px; background: var(--panel); resize: none; max-height: 140px; line-height: 1.4; }
+  .asst-input textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .asst-send { flex: 0 0 auto; width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: .15s; }
+  .asst-send:hover { filter: brightness(1.07); }
+  .asst-send:disabled { opacity: .5; cursor: default; }
+  .asst-send svg { width: 19px; height: 19px; }
   .cal-chip { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 500; padding: 2px 6px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: .1s; }
   .cal-chip.over { background: #FDE7DD; color: var(--over); }
   .cal-chip.soon { background: #FBF0DA; color: var(--soon); }
@@ -367,6 +397,7 @@
     <button data-view="dashboard" aria-pressed="true">Dashboard</button>
     <button data-view="tasks" aria-pressed="false">Tasks</button>
     <button data-view="calendar" aria-pressed="false">Calendar</button>
+    <button data-view="assistant" aria-pressed="false">Assistant</button>
   </div>
 
   <div id="tasksView" hidden>
@@ -405,6 +436,23 @@
   <div id="dashboard"></div>
 
   <div id="calendarView" hidden></div>
+
+  <div id="assistantView" hidden>
+    <div class="asst">
+      <div class="asst-log" id="asstLog">
+        <div class="asst-intro">
+          <div class="asst-intro-h">Ask or add, in plain language.</div>
+          <div class="asst-eg">Try: “Gil does Line 3 panel drawings by Friday” · “What's slipping this week?” · “What's on Miguel's plate?”</div>
+        </div>
+      </div>
+      <div class="asst-input">
+        <textarea id="asstInput" rows="1" placeholder="Ask a question or describe a task…"></textarea>
+        <button class="asst-send" id="asstSend" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- modal -->
@@ -967,7 +1015,7 @@ async function saveTask() {
 $("#openAdd").onclick = () => openModal(null);
 
 function readView() {
-  try { const v = localStorage.getItem("taskdesk:view"); return ["tasks","dashboard","calendar"].includes(v) ? v : "dashboard"; }
+  try { const v = localStorage.getItem("taskdesk:view"); return ["tasks","dashboard","calendar","assistant"].includes(v) ? v : "dashboard"; }
   catch (e) { return "dashboard"; }
 }
 function saveView(v) { try { localStorage.setItem("taskdesk:view", v); } catch (e) {} }
@@ -978,9 +1026,11 @@ function setView(v) {
   $("#tasksView").hidden = (v !== "tasks");
   $("#dashboard").hidden = (v !== "dashboard");
   $("#calendarView").hidden = (v !== "calendar");
+  $("#assistantView").hidden = (v !== "assistant");
   [...$("#tabs").children].forEach(b => b.setAttribute("aria-pressed", b.dataset.view === v));
   if (v === "dashboard") renderDashboard();
   if (v === "calendar") renderCalendar();
+  if (v === "assistant") setTimeout(() => $("#asstInput").focus(), 40);
 }
 setView(view);   // sync the DOM to the restored tab on startup
 $("#tabs").addEventListener("click", e => {
@@ -1161,6 +1211,97 @@ async function init() {
     else showLogin();
   } catch (e) { showLogin(); }
 }
+
+/* ---------- assistant ---------- */
+const asstLog = $("#asstLog");
+const asstInput = $("#asstInput");
+let chatHistory = [];   // {role, content} text turns for context
+
+function asstAppend(html, cls) {
+  const div = document.createElement("div");
+  div.className = cls;
+  div.innerHTML = html;
+  asstLog.appendChild(div);
+  asstLog.scrollTop = asstLog.scrollHeight;
+  return div;
+}
+
+function asstCard(action) {
+  const card = document.createElement("div");
+  card.className = "asst-card";
+  if (action.type === "create") {
+    const t = action.task || {};
+    const meta = [
+      t.who ? `Assigned: ${esc(t.who)}` : "Unassigned",
+      (t.cls && t.cls.length) ? `Class: ${t.cls.map(esc).join(", ")}` : null,
+      t.project ? `Project: ${esc(t.project)}` : null,
+      t.due ? `Due: ${esc(t.due)}` : null,
+      t.notes ? `Notes: ${esc(t.notes)}` : null,
+    ].filter(Boolean).join(" · ");
+    card.innerHTML = `<div class="asst-card-kind">New task</div><div class="asst-card-title">${esc(t.title||"(untitled)")}</div><div class="asst-card-meta">${meta}</div>`;
+  } else if (action.type === "update") {
+    const cur = tasks.find(x => x.id === action.id);
+    const ch = action.changes || {};
+    const parts = Object.entries(ch).map(([k,v]) => `${k}: ${esc(Array.isArray(v)?v.join(", "):String(v))}`).join(" · ");
+    card.innerHTML = `<div class="asst-card-kind">Update</div><div class="asst-card-title">${esc(cur ? cur.title : "task")}</div><div class="asst-card-meta">${parts}</div>`;
+  } else { return null; }
+
+  const actions = document.createElement("div");
+  actions.className = "asst-card-actions";
+  const apply = document.createElement("button"); apply.className = "asst-apply"; apply.textContent = "Apply";
+  const dismiss = document.createElement("button"); dismiss.className = "asst-dismiss"; dismiss.textContent = "Dismiss";
+  apply.onclick = async () => {
+    apply.disabled = true; apply.textContent = "Applying…";
+    try {
+      if (action.type === "create") { tasks.push(await apiCreate(action.task || {})); }
+      else { const u = await apiUpdate(action.id, action.changes || {}); const i = tasks.findIndex(x=>x.id===action.id); if (i>-1) tasks[i]=u; }
+      card.classList.add("done");
+      actions.innerHTML = `<span class="asst-applied">✓ Applied</span>`;
+      render();
+    } catch (e) { apply.disabled = false; apply.textContent = "Apply"; asstAppend("Couldn't apply that — is the server reachable?", "asst-err"); }
+  };
+  dismiss.onclick = () => { card.classList.add("done"); actions.innerHTML = `<span style="color:var(--muted);font-size:13px">Dismissed</span>`; };
+  actions.appendChild(apply); actions.appendChild(dismiss);
+  card.appendChild(actions);
+  return card;
+}
+
+async function sendAsst() {
+  const msg = asstInput.value.trim();
+  if (!msg) return;
+  const intro = asstLog.querySelector(".asst-intro"); if (intro) intro.remove();
+  asstAppend(esc(msg), "asst-msg user");
+  asstInput.value = ""; asstInput.style.height = "auto";
+  $("#asstSend").disabled = true;
+  const thinking = asstAppend("Thinking…", "asst-msg bot thinking");
+
+  const CLASSES = [...document.querySelectorAll('#f-class .chip-opt')].map(b => b.dataset.val);
+  const PEOPLE = [...document.querySelectorAll('#f-who option')].map(o => o.value).filter(Boolean);
+
+  try {
+    const r = await fetch("/api/assistant", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: msg, history: chatHistory.slice(-8), classes: CLASSES, people: PEOPLE }),
+    });
+    const data = await r.json();
+    thinking.remove();
+    if (!r.ok) { asstAppend(esc(data.error || "The assistant had a problem."), "asst-err"); return; }
+    if (data.reply) asstAppend(esc(data.reply), "asst-msg bot");
+    (data.actions || []).forEach(a => { const c = asstCard(a); if (c) asstLog.appendChild(c); });
+    asstLog.scrollTop = asstLog.scrollHeight;
+    chatHistory.push({ role: "user", content: msg });
+    if (data.reply) chatHistory.push({ role: "assistant", content: data.reply });
+  } catch (e) {
+    thinking.remove();
+    asstAppend("Couldn't reach the assistant. Check your connection.", "asst-err");
+  } finally {
+    $("#asstSend").disabled = false; asstInput.focus();
+  }
+}
+
+$("#asstSend").onclick = sendAsst;
+asstInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAsst(); } });
+asstInput.addEventListener("input", () => { asstInput.style.height = "auto"; asstInput.style.height = Math.min(asstInput.scrollHeight, 140) + "px"; });
 
 init();
 
