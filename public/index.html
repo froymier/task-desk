@@ -140,6 +140,18 @@
   .asst-intro { text-align: center; color: var(--muted); padding: 30px 16px; }
   .asst-intro-h { font-family: "Bricolage Grotesque", sans-serif; font-size: 18px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
   .asst-eg { font-size: 13px; line-height: 1.7; }
+  .asst-caps { font-size: 13.5px; color: var(--muted); margin-bottom: 16px; }
+  .asst-caps b { color: var(--ink); font-weight: 600; }
+  .asst-egs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 460px; margin: 0 auto; }
+  .asst-eg-chip { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; padding: 7px 13px; cursor: pointer; transition: .15s; }
+  .asst-eg-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .asst-hint { font-size: 11.5px; color: var(--none); text-align: center; padding: 8px 4px 2px; }
+  .asst-applyall { align-self: flex-start; margin: 2px 0 4px; }
+  .asst-applyall button { font: inherit; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 0; background: var(--ink); color: #fff; transition: .15s; }
+  .asst-applyall button:hover { filter: brightness(1.15); }
+  .asst-applyall button:disabled { opacity: .6; cursor: default; }
+  .asst-card.del { border-left-color: var(--over); }
+  .asst-card.del .asst-card-kind { color: var(--over); }
   .asst-msg { max-width: 82%; font-size: 14px; line-height: 1.5; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
   .asst-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
   .asst-msg.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 5px; box-shadow: var(--shadow); }
@@ -441,10 +453,18 @@
     <div class="asst">
       <div class="asst-log" id="asstLog">
         <div class="asst-intro">
-          <div class="asst-intro-h">Ask or add, in plain language.</div>
-          <div class="asst-eg">Try: “Gil does Line 3 panel drawings by Friday” · “What's slipping this week?” · “What's on Miguel's plate?”</div>
+          <div class="asst-intro-h">Your task assistant</div>
+          <div class="asst-caps"><b>Add</b> tasks · <b>Answer</b> questions · <b>Bulk-edit</b> · <b>Break down</b> a job · <b>Draft</b> updates</div>
+          <div class="asst-egs">
+            <button class="asst-eg-chip">Gil does Line 3 panel drawings by Friday</button>
+            <button class="asst-eg-chip">What's slipping this week?</button>
+            <button class="asst-eg-chip">Move all of Aaron's open tasks to Jack</button>
+            <button class="asst-eg-chip">Break down: retrofit the packaging line</button>
+            <button class="asst-eg-chip">What's on Miguel's plate?</button>
+          </div>
         </div>
       </div>
+      <div class="asst-hint">Add tasks · answer questions · bulk-edit · break down a job · draft updates. Changes are always proposed for you to Apply.</div>
       <div class="asst-input">
         <textarea id="asstInput" rows="1" placeholder="Ask a question or describe a task…"></textarea>
         <button class="asst-send" id="asstSend" aria-label="Send">
@@ -1226,9 +1246,11 @@ function asstAppend(html, cls) {
   return div;
 }
 
-function asstCard(action) {
+function makeActionCard(action) {
   const card = document.createElement("div");
-  card.className = "asst-card";
+  card.className = "asst-card" + (action.type === "delete" ? " del" : "");
+  let applied = false;
+
   if (action.type === "create") {
     const t = action.task || {};
     const meta = [
@@ -1241,29 +1263,33 @@ function asstCard(action) {
     card.innerHTML = `<div class="asst-card-kind">New task</div><div class="asst-card-title">${esc(t.title||"(untitled)")}</div><div class="asst-card-meta">${meta}</div>`;
   } else if (action.type === "update") {
     const cur = tasks.find(x => x.id === action.id);
-    const ch = action.changes || {};
-    const parts = Object.entries(ch).map(([k,v]) => `${k}: ${esc(Array.isArray(v)?v.join(", "):String(v))}`).join(" · ");
+    const parts = Object.entries(action.changes || {}).map(([k,v]) => `${k}: ${esc(Array.isArray(v)?v.join(", "):String(v))}`).join(" · ");
     card.innerHTML = `<div class="asst-card-kind">Update</div><div class="asst-card-title">${esc(cur ? cur.title : "task")}</div><div class="asst-card-meta">${parts}</div>`;
+  } else if (action.type === "delete") {
+    const cur = tasks.find(x => x.id === action.id);
+    card.innerHTML = `<div class="asst-card-kind">Delete</div><div class="asst-card-title">${esc(cur ? cur.title : "task")}</div><div class="asst-card-meta">This task will be permanently removed.</div>`;
   } else { return null; }
 
-  const actions = document.createElement("div");
-  actions.className = "asst-card-actions";
-  const apply = document.createElement("button"); apply.className = "asst-apply"; apply.textContent = "Apply";
-  const dismiss = document.createElement("button"); dismiss.className = "asst-dismiss"; dismiss.textContent = "Dismiss";
-  apply.onclick = async () => {
-    apply.disabled = true; apply.textContent = "Applying…";
+  const row = document.createElement("div"); row.className = "asst-card-actions";
+  const applyBtn = document.createElement("button"); applyBtn.className = "asst-apply"; applyBtn.textContent = action.type === "delete" ? "Delete" : "Apply";
+  const dismissBtn = document.createElement("button"); dismissBtn.className = "asst-dismiss"; dismissBtn.textContent = "Dismiss";
+
+  async function doApply() {
+    if (applied) return;
+    applied = true; applyBtn.disabled = true; applyBtn.textContent = "Working…";
     try {
-      if (action.type === "create") { tasks.push(await apiCreate(action.task || {})); }
-      else { const u = await apiUpdate(action.id, action.changes || {}); const i = tasks.findIndex(x=>x.id===action.id); if (i>-1) tasks[i]=u; }
-      card.classList.add("done");
-      actions.innerHTML = `<span class="asst-applied">✓ Applied</span>`;
+      if (action.type === "create") tasks.push(await apiCreate(action.task || {}));
+      else if (action.type === "update") { const u = await apiUpdate(action.id, action.changes || {}); const i = tasks.findIndex(x=>x.id===action.id); if (i>-1) tasks[i]=u; }
+      else if (action.type === "delete") { await apiDelete(action.id); tasks = tasks.filter(x=>x.id!==action.id); }
+      card.classList.add("done"); row.innerHTML = `<span class="asst-applied">✓ Done</span>`;
       render();
-    } catch (e) { apply.disabled = false; apply.textContent = "Apply"; asstAppend("Couldn't apply that — is the server reachable?", "asst-err"); }
-  };
-  dismiss.onclick = () => { card.classList.add("done"); actions.innerHTML = `<span style="color:var(--muted);font-size:13px">Dismissed</span>`; };
-  actions.appendChild(apply); actions.appendChild(dismiss);
-  card.appendChild(actions);
-  return card;
+    } catch (e) { applied = false; applyBtn.disabled = false; applyBtn.textContent = action.type === "delete" ? "Delete" : "Apply"; }
+  }
+  applyBtn.onclick = doApply;
+  dismissBtn.onclick = () => { if (applied) return; applied = true; card.classList.add("done"); row.innerHTML = `<span style="color:var(--muted);font-size:13px">Dismissed</span>`; };
+  row.appendChild(applyBtn); row.appendChild(dismissBtn);
+  card.appendChild(row);
+  return { el: card, apply: doApply, isPending: () => !applied };
 }
 
 async function sendAsst() {
@@ -1287,7 +1313,18 @@ async function sendAsst() {
     thinking.remove();
     if (!r.ok) { asstAppend(esc(data.error || "The assistant had a problem."), "asst-err"); return; }
     if (data.reply) asstAppend(esc(data.reply), "asst-msg bot");
-    (data.actions || []).forEach(a => { const c = asstCard(a); if (c) asstLog.appendChild(c); });
+    const cards = (data.actions || []).map(makeActionCard).filter(Boolean);
+    cards.forEach(c => asstLog.appendChild(c.el));
+    if (cards.length >= 2) {
+      const bar = document.createElement("div"); bar.className = "asst-applyall";
+      const b = document.createElement("button"); b.textContent = `Apply all (${cards.length})`;
+      b.onclick = async () => {
+        b.disabled = true; b.textContent = "Applying…";
+        for (const c of cards) { if (c.isPending()) await c.apply(); }
+        b.textContent = "Applied all";
+      };
+      bar.appendChild(b); asstLog.appendChild(bar);
+    }
     asstLog.scrollTop = asstLog.scrollHeight;
     chatHistory.push({ role: "user", content: msg });
     if (data.reply) chatHistory.push({ role: "assistant", content: data.reply });
@@ -1300,6 +1337,10 @@ async function sendAsst() {
 }
 
 $("#asstSend").onclick = sendAsst;
+asstLog.addEventListener("click", e => {
+  const chip = e.target.closest(".asst-eg-chip");
+  if (chip) { asstInput.value = chip.textContent; sendAsst(); }
+});
 asstInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAsst(); } });
 asstInput.addEventListener("input", () => { asstInput.style.height = "auto"; asstInput.style.height = Math.min(asstInput.scrollHeight, 140) + "px"; });
 

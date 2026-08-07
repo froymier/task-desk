@@ -222,19 +222,22 @@ Valid people (assignees): ${JSON.stringify(people || [])}.
 Valid classes (a task may have zero or more of these): ${JSON.stringify(classes || [])}.
 Current tasks (JSON array): ${JSON.stringify(taskList)}.
 
-You help the user capture new tasks and answer questions about the team's workload, using ONLY the task data above. Do not invent tasks that already exist. Interpret relative dates like "Friday" or "next week" into real dates based on today.
+You help the user capture new tasks, answer questions about the team's workload, make bulk edits, and break a big job into a set of tasks — using ONLY the task data above. Do not invent tasks that already exist. Interpret relative dates like "Friday" or "next week" into real dates based on today.
 
 Respond with ONLY a raw JSON object, no markdown fences and no text outside it:
 {"reply": string, "actions": Action[]}
 Where each Action is one of:
 {"type":"create","task":{"title":string,"who":string,"cls":string[],"project":string,"due":"YYYY-MM-DD"|"","notes":string}}
 {"type":"update","id":string,"changes":{ }}   // changes may include any of: title, who, cls (string[]), project, due, notes, done (boolean)
+{"type":"delete","id":string}
 Rules:
 - "who" must be exactly one of the valid people, or "" if unassigned.
 - "cls" items must be exactly from the valid classes list; use [] if none apply.
-- update "id" must be an existing task id from Current tasks.
+- update/delete "id" must be an existing task id from Current tasks.
+- BULK EDITS: when a request matches several tasks (e.g. "move all of Aaron's open tasks to Jack", "push every Line 3 deadline out a week", "re-tag Documentation as Manuals"), return one action per matching task — don't skip any.
+- BREAK DOWN A JOB: when the user describes a larger job (e.g. "retrofit the packaging line"), return several sensible "create" actions covering the phases, assigned to appropriate people and classes, sequenced with reasonable deadlines.
 - Use actions ONLY when the user wants to add or change tasks. For questions, "actions" must be [].
-- Keep "reply" short and friendly. If you proposed actions, tell the user to review and Apply them.`;
+- Keep "reply" short and friendly. When you propose actions, briefly say what you're proposing and tell the user to review and Apply (or Apply all).`;
 
     const messages = [];
     (Array.isArray(history) ? history : []).slice(-8).forEach((h) => {
@@ -249,7 +252,7 @@ Rules:
         "x-api-key": ANTHROPIC_KEY,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({ model: ASSISTANT_MODEL, max_tokens: 1024, system, messages }),
+      body: JSON.stringify({ model: ASSISTANT_MODEL, max_tokens: 2048, system, messages }),
     });
 
     if (!r.ok) {
