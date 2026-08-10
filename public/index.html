@@ -397,6 +397,10 @@
   .signout[hidden] { display: none; }
   .signout svg { width: 15px; height: 15px; }
   .head-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex: 0 0 auto; }
+  .hdr-pill { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; border: 1px solid var(--line-strong); background: var(--panel); cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); padding: 7px 13px; border-radius: 999px; transition: .15s; box-shadow: var(--shadow); }
+  .hdr-pill:hover { border-color: var(--accent); color: var(--accent); }
+  .hdr-pill[hidden] { display: none; }
+  .hdr-pill svg { width: 15px; height: 15px; }
   .refresh {
     display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
     border: 1px solid var(--line); background: var(--panel); cursor: pointer; color: var(--muted);
@@ -433,6 +437,10 @@
         <p class="summary" id="summary">Loading…</p>
       </div>
       <div class="head-actions">
+        <button class="hdr-pill" id="openTmpl" title="Manage templates" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Templates
+        </button>
         <button class="refresh" id="refreshBtn" aria-label="Refresh" title="Refresh">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
         </button>
@@ -1276,6 +1284,7 @@ async function fetchTemplates(){
   return templatesCache || (templatesCache = []);
 }
 $("#pj-manage").onclick = openTmplList;
+$("#openTmpl").onclick = openTmplList;
 async function openTmplList(){ await fetchTemplates(); renderTmplList(); $("#tmplScrim").classList.add("open"); }
 function closeTmplList(){
   $("#tmplScrim").classList.remove("open");
@@ -1527,6 +1536,7 @@ list.addEventListener("click", async e => {
 function showLogin() {
   $("#authScrim").hidden = false;
   $("#signoutBtn").hidden = true;
+  $("#openTmpl").hidden = true;
   $("#login-pass").disabled = false;
   setTimeout(() => $("#login-user").focus(), 60);
 }
@@ -1566,6 +1576,7 @@ function startSession(name) {
   ME = name;
   $("#whoami").textContent = name;
   $("#signoutBtn").hidden = false;
+  $("#openTmpl").hidden = false;
   hideLogin();
   load();
 }
