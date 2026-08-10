@@ -363,6 +363,28 @@
   .pj-due-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .pj-summary { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
   .pj-summary b { color: var(--ink); }
+  .link-btn { background: none; border: 0; color: var(--accent); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; padding: 0 0 12px; }
+  .link-btn:hover { text-decoration: underline; }
+  .tmpl-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+  .tmpl-row:last-child { border-bottom: 0; }
+  .tmpl-info { flex: 1; min-width: 0; }
+  .tmpl-name { font-size: 14.5px; font-weight: 600; }
+  .tmpl-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .tmpl-row .icon-btn { border: 1px solid var(--line); }
+  .te-phase { border: 1px solid var(--line-strong); border-radius: 10px; padding: 11px 12px; margin-bottom: 10px; }
+  .te-phase-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+  .te-pname { flex: 1; min-width: 0; font: inherit; font-size: 13.5px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 9px; background: var(--paper); }
+  .te-pdur { width: 52px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 6px; background: var(--paper); text-align: center; }
+  .te-dur-lbl { font-size: 12px; color: var(--muted); }
+  .te-mini { border: 1px solid var(--line); background: var(--panel); cursor: pointer; width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; }
+  .te-mini:hover { color: var(--ink); border-color: var(--line-strong); }
+  .te-mini.rm:hover { color: var(--over); border-color: var(--over); }
+  .te-mini svg { width: 15px; height: 15px; }
+  .te-sub { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--none); font-weight: 600; margin: 8px 0 5px; }
+  .te-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .te-chip { font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer; border: 1px solid var(--line-strong); background: var(--paper); color: var(--muted); padding: 4px 9px; border-radius: 999px; transition: .1s; }
+  .te-chip:hover { border-color: var(--accent); color: var(--ink); }
+  .te-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .signout {
@@ -478,6 +500,7 @@
           <div class="asst-caps"><b>Add</b> tasks · <b>Answer</b> questions · <b>Bulk-edit</b> · <b>Break down</b> a job · <b>Draft</b> updates</div>
           <div class="asst-egs">
             <button class="asst-eg-chip">Gil does Line 3 panel drawings by Friday</button>
+            <button class="asst-eg-chip">Start a Sales Order for Acme, SO-1234, Monday</button>
             <button class="asst-eg-chip">What's slipping this week?</button>
             <button class="asst-eg-chip">Move all of Aaron's open tasks to Jack</button>
             <button class="asst-eg-chip">Break down: retrofit the packaging line</button>
@@ -485,7 +508,7 @@
           </div>
         </div>
       </div>
-      <div class="asst-hint">Add tasks · answer questions · bulk-edit · break down a job · draft updates. Changes are always proposed for you to Apply.</div>
+      <div class="asst-hint">Add tasks · answer questions · bulk-edit · start a project from a template · draft updates. Changes are always proposed for you to Apply.</div>
       <div class="asst-input">
         <textarea id="asstInput" rows="1" placeholder="Ask a question or describe a task…"></textarea>
         <button class="asst-send" id="asstSend" aria-label="Send">
@@ -576,6 +599,7 @@
         <input id="pj-start" type="date" />
       </div>
     </div>
+    <button class="link-btn" id="pj-manage" type="button">Manage templates…</button>
     <div class="row2">
       <div class="field">
         <label for="pj-so">SO number</label>
@@ -592,6 +616,43 @@
     <div class="modal-actions">
       <button class="btn-ghost" id="pj-cancel">Cancel</button>
       <button class="btn-primary" id="pj-create">Create project</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="tmplScrim">
+  <div class="modal wide">
+    <div class="head-row" style="align-items:center; margin-bottom:14px;">
+      <h2 style="margin:0">Templates</h2>
+      <button class="add-btn" id="tmpl-new">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        New template
+      </button>
+    </div>
+    <div id="tmpl-list"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="tmpl-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="tmplEditScrim">
+  <div class="modal wide">
+    <h2 id="tmplEditTitle">New template</h2>
+    <div class="field">
+      <label for="te-name">Template name</label>
+      <input id="te-name" placeholder="e.g. Retrofit" autocomplete="off" />
+    </div>
+    <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; letter-spacing:.02em;">Phases</label>
+    <div id="te-phases"></div>
+    <button class="add-btn ghost-btn" id="te-addphase" style="margin-top:2px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add phase
+    </button>
+    <div id="te-err" style="color:var(--over); font-size:13px; min-height:16px; margin-top:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="te-cancel">Cancel</button>
+      <button class="btn-primary" id="te-save">Save template</button>
     </div>
   </div>
 </div>
@@ -1208,6 +1269,127 @@ $("#pj-phases").addEventListener("change", e => {                 // editing a p
 });
 $("#projScrim").addEventListener("click", e => { if (e.target.id === "projScrim") closeProjModal(); });
 
+/* ---------- template manager ---------- */
+async function fetchTemplates(){
+  try { const r = await fetch("/api/templates"); if (r.ok) templatesCache = await r.json(); }
+  catch (e) { templatesCache = templatesCache || []; }
+  return templatesCache || (templatesCache = []);
+}
+$("#pj-manage").onclick = openTmplList;
+async function openTmplList(){ await fetchTemplates(); renderTmplList(); $("#tmplScrim").classList.add("open"); }
+function closeTmplList(){
+  $("#tmplScrim").classList.remove("open");
+  if ($("#projScrim").classList.contains("open")) {
+    const cur = $("#pj-template").value;
+    $("#pj-template").innerHTML = (templatesCache||[]).map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+    if ([...$("#pj-template").options].some(o => o.value === cur)) $("#pj-template").value = cur;
+    if ((templatesCache||[]).length) pjRenderPhases(); else $("#pj-phases").innerHTML = "";
+  }
+}
+function renderTmplList(){
+  const list = $("#tmpl-list");
+  if (!(templatesCache||[]).length) { list.innerHTML = `<div class="dash-empty">No templates yet — create one to get started.</div>`; return; }
+  list.innerHTML = templatesCache.map(t => `
+    <div class="tmpl-row">
+      <div class="tmpl-info">
+        <div class="tmpl-name">${esc(t.name)}</div>
+        <div class="tmpl-meta">${t.phases.length} ${t.phases.length===1?"phase":"phases"} · ${esc(t.phases.map(p=>p.name).join(", "))}</div>
+      </div>
+      <button class="icon-btn" data-edit-tmpl="${esc(t.id)}" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+      <button class="icon-btn del" data-del-tmpl="${esc(t.id)}" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
+    </div>`).join("");
+}
+$("#tmpl-list").addEventListener("click", async e => {
+  const ed = e.target.closest("[data-edit-tmpl]");
+  const dl = e.target.closest("[data-del-tmpl]");
+  if (ed) { const t = templatesCache.find(x=>x.id===ed.dataset.editTmpl); if (t) openTeEditor(t); }
+  else if (dl) {
+    const t = templatesCache.find(x=>x.id===dl.dataset.delTmpl);
+    if (t && confirm(`Delete template "${t.name}"? Projects already created from it aren't affected.`)) {
+      try { await fetch(`/api/templates/${t.id}`, { method:"DELETE" }); await fetchTemplates(); renderTmplList(); }
+      catch (err) { alert("Couldn't delete that template."); }
+    }
+  }
+});
+$("#tmpl-new").onclick = () => openTeEditor(null);
+$("#tmpl-close").onclick = closeTmplList;
+$("#tmplScrim").addEventListener("click", e => { if (e.target.id==="tmplScrim") closeTmplList(); });
+
+/* template editor */
+let teDraft = null;
+const teBlankPhase = () => ({ name:"", durationDays:5, cls:[], pool:[] });
+function openTeEditor(tpl){
+  teDraft = tpl
+    ? { id: tpl.id, name: tpl.name, phases: tpl.phases.map(p=>({ name:p.name, durationDays:p.durationDays, cls:[...(p.cls||[])], pool:[...(p.pool||[])] })) }
+    : { name:"", phases:[teBlankPhase()] };
+  $("#tmplEditTitle").textContent = tpl ? "Edit template" : "New template";
+  $("#te-name").value = teDraft.name;
+  $("#te-err").textContent = "";
+  renderTePhases();
+  $("#tmplEditScrim").classList.add("open");
+}
+function closeTeEditor(){ $("#tmplEditScrim").classList.remove("open"); }
+function renderTePhases(){
+  const classes = [...document.querySelectorAll('#f-class .chip-opt')].map(b=>b.dataset.val);
+  const people = [...document.querySelectorAll('#f-who option')].map(o=>o.value).filter(Boolean);
+  $("#te-phases").innerHTML = teDraft.phases.map((p,i)=>{
+    const clsChips = classes.map(c=>`<button class="te-chip ${p.cls.includes(c)?"on":""}" data-i="${i}" data-type="cls" data-val="${esc(c)}">${esc(c)}</button>`).join("");
+    const poolChips = people.map(pe=>`<button class="te-chip ${p.pool.includes(pe)?"on":""}" data-i="${i}" data-type="pool" data-val="${esc(pe)}">${esc(pe)}</button>`).join("");
+    return `<div class="te-phase">
+      <div class="te-phase-top">
+        <input class="te-pname" data-i="${i}" placeholder="Phase name" value="${esc(p.name)}" autocomplete="off">
+        <input class="te-pdur" data-i="${i}" type="number" min="1" value="${p.durationDays}">
+        <span class="te-dur-lbl">days</span>
+        <button class="te-mini" data-move="up" data-i="${i}" aria-label="Move up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+        <button class="te-mini" data-move="down" data-i="${i}" aria-label="Move down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <button class="te-mini rm" data-remove data-i="${i}" aria-label="Remove phase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="te-sub">Classes</div>
+      <div class="te-chips">${clsChips}</div>
+      <div class="te-sub">Who can do it</div>
+      <div class="te-chips">${poolChips}</div>
+    </div>`;
+  }).join("");
+}
+$("#te-phases").addEventListener("click", e => {
+  const chip = e.target.closest(".te-chip");
+  if (chip) {
+    const arr = teDraft.phases[+chip.dataset.i][chip.dataset.type], val = chip.dataset.val;
+    const idx = arr.indexOf(val); if (idx>=0) arr.splice(idx,1); else arr.push(val);
+    chip.classList.toggle("on"); return;
+  }
+  const mv = e.target.closest("[data-move]");
+  if (mv) { const i=+mv.dataset.i, j=i+(mv.dataset.move==="up"?-1:1);
+    if (j>=0 && j<teDraft.phases.length){ const ph=teDraft.phases; [ph[i],ph[j]]=[ph[j],ph[i]]; renderTePhases(); } return; }
+  const rm = e.target.closest("[data-remove]");
+  if (rm) { if (teDraft.phases.length>1){ teDraft.phases.splice(+rm.dataset.i,1); renderTePhases(); } return; }
+});
+$("#te-phases").addEventListener("input", e => {
+  const n = e.target.closest(".te-pname"); if (n) { teDraft.phases[+n.dataset.i].name = n.value; return; }
+  const d = e.target.closest(".te-pdur"); if (d) { teDraft.phases[+d.dataset.i].durationDays = Math.max(1, parseInt(d.value,10)||1); }
+});
+$("#te-name").addEventListener("input", () => { teDraft.name = $("#te-name").value; });
+$("#te-addphase").onclick = () => { teDraft.phases.push(teBlankPhase()); renderTePhases(); };
+$("#te-cancel").onclick = closeTeEditor;
+$("#tmplEditScrim").addEventListener("click", e => { if (e.target.id==="tmplEditScrim") closeTeEditor(); });
+$("#te-save").onclick = async () => {
+  teDraft.name = $("#te-name").value.trim();
+  const err = $("#te-err"); err.textContent = "";
+  if (!teDraft.name) { err.textContent = "Give the template a name."; return; }
+  const phases = teDraft.phases.filter(p => p.name.trim());
+  if (!phases.length) { err.textContent = "Add at least one phase with a name."; return; }
+  const btn = $("#te-save"); btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const r = await fetch(teDraft.id ? `/api/templates/${teDraft.id}` : "/api/templates", {
+      method: teDraft.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: teDraft.name, phases }),
+    });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); err.textContent = d.error || "Couldn't save."; return; }
+    await fetchTemplates(); closeTeEditor(); renderTmplList();
+  } catch (e) { err.textContent = "Couldn't reach the server."; }
+  finally { btn.disabled = false; btn.textContent = "Save template"; }
+};
+
 function readView() {
   try { const v = localStorage.getItem("taskdesk:view"); return ["tasks","dashboard","calendar","assistant"].includes(v) ? v : "dashboard"; }
   catch (e) { return "dashboard"; }
@@ -1442,6 +1624,69 @@ function makeActionCard(action) {
   } else if (action.type === "delete") {
     const cur = tasks.find(x => x.id === action.id);
     card.innerHTML = `<div class="asst-card-kind">Delete</div><div class="asst-card-title">${esc(cur ? cur.title : "task")}</div><div class="asst-card-meta">This task will be permanently removed.</div>`;
+  } else if (action.type === "project") {
+    const tpl = (templatesCache || []).find(t => t.name.toLowerCase() === String(action.template || "").toLowerCase());
+    const so = String(action.so || "").trim(), customer = String(action.customer || "").trim();
+    const project = [so, customer].filter(Boolean).join(" ");
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(action.startDate || "") ? action.startDate : todayStr();
+    if (!tpl) {
+      card.innerHTML = `<div class="asst-card-kind">Project</div><div class="asst-card-title">${esc(project || "New project")}</div><div class="asst-card-meta">No template named “${esc(action.template||"")}”. Check the name in Manage templates.</div>`;
+      return { el: card, apply: async () => {}, isPending: () => false };
+    }
+    const ends = pjSchedule(start, tpl.phases);
+    const overrides = (action.assignees && typeof action.assignees === "object") ? action.assignees : {};
+    const assignments = {}; tpl.phases.forEach((p, i) => { assignments[i] = overrides[p.name] || pjLeastLoaded(p.pool); });
+    const dues = ends.map(pjFmtISO);
+    const rows = tpl.phases.map((p, i) => `${esc(p.name)} — ${esc(assignments[i] || "—")} — ${pjPretty(ends[i])}`).join("<br>");
+    card.innerHTML = `<div class="asst-card-kind">New project · ${esc(tpl.name)}</div><div class="asst-card-title">${esc(project || "(no name)")}</div><div class="asst-card-meta">${tpl.phases.length} tasks, starting ${esc(start)}:<br>${rows}</div>`;
+    const row = document.createElement("div"); row.className = "asst-card-actions";
+    const applyBtn = document.createElement("button"); applyBtn.className = "asst-apply"; applyBtn.textContent = "Create project";
+    const dismissBtn = document.createElement("button"); dismissBtn.className = "asst-dismiss"; dismissBtn.textContent = "Dismiss";
+    let applied = false;
+    async function doApplyProject() {
+      if (applied) return; applied = true; applyBtn.disabled = true; applyBtn.textContent = "Creating…";
+      try {
+        const r = await fetch("/api/projects/from-template", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: tpl.id, so, customer, startDate: start, assignments, dues }),
+        });
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || "failed");
+        d.tasks.forEach(t => tasks.push(t));
+        card.classList.add("done"); row.innerHTML = `<span class="asst-applied">✓ Created ${d.tasks.length} tasks</span>`;
+        render();
+      } catch (e) { applied = false; applyBtn.disabled = false; applyBtn.textContent = "Create project"; }
+    }
+    applyBtn.onclick = doApplyProject;
+    dismissBtn.onclick = () => { if (applied) return; applied = true; card.classList.add("done"); row.innerHTML = `<span style="color:var(--muted);font-size:13px">Dismissed</span>`; };
+    row.appendChild(applyBtn); row.appendChild(dismissBtn); card.appendChild(row);
+    return { el: card, apply: doApplyProject, isPending: () => !applied };
+  } else if (action.type === "template") {
+    const name = String(action.name || "").trim();
+    const phases = Array.isArray(action.phases) ? action.phases : [];
+    const rows = phases.map(p => {
+      const bits = [`${p.durationDays || 1}d`];
+      if (p.cls && p.cls.length) bits.push(p.cls.map(esc).join(", "));
+      if (p.pool && p.pool.length) bits.push(p.pool.map(esc).join(" / "));
+      return `${esc(p.name || "(unnamed)")} — ${bits.join(" · ")}`;
+    }).join("<br>");
+    card.innerHTML = `<div class="asst-card-kind">New template</div><div class="asst-card-title">${esc(name || "(unnamed)")}</div><div class="asst-card-meta">${phases.length} ${phases.length===1?"phase":"phases"}:<br>${rows}</div>`;
+    const row = document.createElement("div"); row.className = "asst-card-actions";
+    const applyBtn = document.createElement("button"); applyBtn.className = "asst-apply"; applyBtn.textContent = "Save template";
+    const dismissBtn = document.createElement("button"); dismissBtn.className = "asst-dismiss"; dismissBtn.textContent = "Dismiss";
+    let applied = false;
+    async function doSaveTemplate() {
+      if (applied) return; applied = true; applyBtn.disabled = true; applyBtn.textContent = "Saving…";
+      try {
+        const r = await fetch("/api/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, phases }) });
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || "failed");
+        await fetchTemplates();
+        card.classList.add("done"); row.innerHTML = `<span class="asst-applied">✓ Saved template</span>`;
+      } catch (e) { applied = false; applyBtn.disabled = false; applyBtn.textContent = "Save template"; }
+    }
+    applyBtn.onclick = doSaveTemplate;
+    dismissBtn.onclick = () => { if (applied) return; applied = true; card.classList.add("done"); row.innerHTML = `<span style="color:var(--muted);font-size:13px">Dismissed</span>`; };
+    row.appendChild(applyBtn); row.appendChild(dismissBtn); card.appendChild(row);
+    return { el: card, apply: doSaveTemplate, isPending: () => !applied };
   } else { return null; }
 
   const row = document.createElement("div"); row.className = "asst-card-actions";
@@ -1487,6 +1732,7 @@ async function sendAsst() {
     thinking.remove();
     if (!r.ok) { asstAppend(esc(data.error || "The assistant had a problem."), "asst-err"); return; }
     if (data.reply) asstAppend(esc(data.reply), "asst-msg bot");
+    if ((data.actions || []).some(a => a.type === "project")) await fetchTemplates();
     const cards = (data.actions || []).map(makeActionCard).filter(Boolean);
     cards.forEach(c => asstLog.appendChild(c.el));
     if (cards.length >= 2) {

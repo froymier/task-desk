@@ -30,6 +30,7 @@ function stripFences(s) {
 
 const client = new MongoClient(uri);
 let tasks; // the MongoDB collection
+let templatesCol; // project templates collection
 
 // Shape a database document into what the frontend expects.
 const out = (d) => ({
@@ -147,10 +148,9 @@ app.get("/api/me", requireAuth, (req, res) => {
   res.json({ name: USERS[req.username].name });
 });
 
-// ---- project templates (v1: code-defined; a template manager can move these to the DB later) ----
-const TEMPLATES = [
+// ---- project templates (stored in MongoDB; the Sales Order one is seeded on first run) ----
+const DEFAULT_TEMPLATES = [
   {
-    id: "sales-order",
     name: "Sales Order",
     phases: [
       { name: "Design Schematics",        durationDays: 5, cls: ["Schematics / Panels"],        pool: ["Ben","Tono","Alejandra","Javier","Angel B"] },
@@ -162,6 +162,24 @@ const TEMPLATES = [
     ],
   },
 ];
+
+const templateOut = (d) => ({
+  id: d._id.toString(),
+  name: d.name,
+  phases: (d.phases || []).map((p) => ({ name: p.name, durationDays: p.durationDays, cls: p.cls || [], pool: p.pool || [] })),
+});
+
+function cleanTemplate(body) {
+  const name = String((body && body.name) || "").trim();
+  const phasesIn = Array.isArray(body && body.phases) ? body.phases : [];
+  const phases = phasesIn.map((p) => ({
+    name: String((p && p.name) || "").trim(),
+    durationDays: Math.max(1, parseInt(p && p.durationDays, 10) || 1),
+    cls: Array.isArray(p && p.cls) ? p.cls.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()) : [],
+    pool: Array.isArray(p && p.pool) ? p.pool.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()) : [],
+  })).filter((p) => p.name);
+  return { name, phases };
+}
 
 // business-day scheduling (skips Sat/Sun), all in UTC to avoid timezone drift
 const parseYMD = (s) => new Date(s + "T00:00:00Z");
@@ -234,12 +252,45 @@ app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
 });
 
 // ---- project templates ----
-app.get("/api/templates", requireAuth, (req, res) => res.json(TEMPLATES));
+app.get("/api/templates", requireAuth, async (req, res) => {
+  try {
+    const docs = await templatesCol.find().sort({ name: 1 }).toArray();
+    res.json(docs.map(templateOut));
+  } catch (e) { res.status(500).json({ error: "Could not load templates" }); }
+});
+
+app.post("/api/templates", requireAuth, async (req, res) => {
+  try {
+    const t = cleanTemplate(req.body);
+    if (!t.name || !t.phases.length) return res.status(400).json({ error: "A template needs a name and at least one phase" });
+    const r = await templatesCol.insertOne(t);
+    res.json(templateOut({ ...t, _id: r.insertedId }));
+  } catch (e) { res.status(500).json({ error: "Could not save template" }); }
+});
+
+app.put("/api/templates/:id", requireAuth, async (req, res) => {
+  let _id; try { _id = new ObjectId(req.params.id); } catch { return res.status(400).json({ error: "Bad id" }); }
+  try {
+    const t = cleanTemplate(req.body);
+    if (!t.name || !t.phases.length) return res.status(400).json({ error: "A template needs a name and at least one phase" });
+    await templatesCol.updateOne({ _id }, { $set: t });
+    const doc = await templatesCol.findOne({ _id });
+    if (!doc) return res.status(404).json({ error: "Not found" });
+    res.json(templateOut(doc));
+  } catch (e) { res.status(500).json({ error: "Could not update template" }); }
+});
+
+app.delete("/api/templates/:id", requireAuth, async (req, res) => {
+  let _id; try { _id = new ObjectId(req.params.id); } catch { return res.status(400).json({ error: "Bad id" }); }
+  try { await templatesCol.deleteOne({ _id }); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: "Could not delete template" }); }
+});
 
 app.post("/api/projects/from-template", requireAuth, async (req, res) => {
   try {
     const { templateId, so, customer, startDate, assignments, dues: clientDues } = req.body || {};
-    const tpl = TEMPLATES.find((t) => t.id === templateId);
+    let _tid; try { _tid = new ObjectId(templateId); } catch { return res.status(400).json({ error: "Unknown template" }); }
+    const tpl = await templatesCol.findOne({ _id: _tid });
     if (!tpl) return res.status(400).json({ error: "Unknown template" });
     if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return res.status(400).json({ error: "Pick a valid start date" });
     const project = [String(so || "").trim(), String(customer || "").trim()].filter(Boolean).join(" ");
@@ -285,6 +336,12 @@ app.post("/api/assistant", requireAuth, async (req, res) => {
       return { id: o.id, title: o.title, who: o.who, cls: o.cls, project: o.project, due: o.due, done: o.done };
     });
 
+    const tplDocs = await templatesCol.find().sort({ name: 1 }).toArray();
+    const templateInfo = tplDocs.map((t) => ({
+      name: t.name,
+      phases: (t.phases || []).map((p) => ({ name: p.name, durationDays: p.durationDays, pool: p.pool || [] })),
+    }));
+
     const today = new Date().toISOString().slice(0, 10);
     const dow = new Date().toLocaleDateString("en-US", { weekday: "long" });
 
@@ -293,8 +350,9 @@ Today is ${dow}, ${today}.
 Valid people (assignees): ${JSON.stringify(people || [])}.
 Valid classes (a task may have zero or more of these): ${JSON.stringify(classes || [])}.
 Current tasks (JSON array): ${JSON.stringify(taskList)}.
+Available project templates (JSON array): ${JSON.stringify(templateInfo)}.
 
-You help the user capture new tasks, answer questions about the team's workload, make bulk edits, and break a big job into a set of tasks — using ONLY the task data above. Do not invent tasks that already exist. Interpret relative dates like "Friday" or "next week" into real dates based on today.
+You help the user capture new tasks, answer questions about the team's workload, make bulk edits, break a big job into a set of tasks, and launch whole projects from a template — using ONLY the data above. Do not invent tasks that already exist. Interpret relative dates like "Friday" or "next week" into real dates based on today.
 
 Respond with ONLY a raw JSON object, no markdown fences and no text outside it:
 {"reply": string, "actions": Action[]}
@@ -302,14 +360,19 @@ Where each Action is one of:
 {"type":"create","task":{"title":string,"who":string,"cls":string[],"project":string,"due":"YYYY-MM-DD"|"","notes":string}}
 {"type":"update","id":string,"changes":{ }}   // changes may include any of: title, who, cls (string[]), project, due, notes, done (boolean)
 {"type":"delete","id":string}
+{"type":"project","template":string,"so":string,"customer":string,"startDate":"YYYY-MM-DD","assignees":{}}
+{"type":"template","name":string,"phases":[{"name":string,"durationDays":number,"cls":string[],"pool":string[]}]}
 Rules:
 - "who" must be exactly one of the valid people, or "" if unassigned.
 - "cls" items must be exactly from the valid classes list; use [] if none apply.
 - update/delete "id" must be an existing task id from Current tasks.
 - BULK EDITS: when a request matches several tasks (e.g. "move all of Aaron's open tasks to Jack", "push every Line 3 deadline out a week", "re-tag Documentation as Manuals"), return one action per matching task — don't skip any.
-- BREAK DOWN A JOB: when the user describes a larger job (e.g. "retrofit the packaging line"), return several sensible "create" actions covering the phases, assigned to appropriate people and classes, sequenced with reasonable deadlines.
-- Use actions ONLY when the user wants to add or change tasks. For questions, "actions" must be [].
-- Keep "reply" short and friendly. When you propose actions, briefly say what you're proposing and tell the user to review and Apply (or Apply all).`;
+- BREAK DOWN A JOB: when the user describes a larger ad-hoc job with no matching template, return several "create" actions covering the phases.
+- LAUNCH A PROJECT: when the user asks to start/create a project that matches a template by name (e.g. "start a Sales Order for Acme, SO-1234, Monday"), return a SINGLE "project" action. "template" must exactly match one of the Available project templates' names. Put the order/SO number in "so" and the customer in "customer". Resolve the start date. If you have neither an SO number nor a customer, ask for it in "reply" instead of emitting the action. The app fills each phase's assignee (least-loaded from its pool) and computes the schedule — you do NOT list the phase tasks yourself.
+- TWEAK A PROPOSED PROJECT: if the user adjusts a project you just proposed (e.g. "push the start a week", "give PLC to Gil"), re-emit the SINGLE "project" action with the change applied — set the new "startDate", and/or put per-phase assignee overrides in "assignees" as { "<exact phase name>": "<person>" }. Only include phases the user specifically named; leave "assignees" as {} otherwise.
+- BUILD A TEMPLATE: when the user asks to create or save a template (e.g. "make a Retrofit template with these phases…"), return a SINGLE "template" action. Each phase needs a name, a durationDays (business days), cls from the valid classes, and a pool of eligible people from the valid people. Tell the user in "reply" to review and Save it.
+- Use actions ONLY when the user wants to add or change things. For questions, "actions" must be [].
+- Keep "reply" short and friendly. When you propose actions, briefly say what you're proposing and tell the user to review and Apply (or Apply all / Save).`;
 
     const messages = [];
     (Array.isArray(history) ? history : []).slice(-8).forEach((h) => {
@@ -360,6 +423,10 @@ async function start() {
   await client.connect();
   tasks = client.db("taskdesk").collection("tasks");
   await tasks.createIndex({ createdAt: 1 });
+  templatesCol = client.db("taskdesk").collection("templates");
+  if ((await templatesCol.countDocuments()) === 0) {
+    await templatesCol.insertMany(DEFAULT_TEMPLATES.map((t) => ({ name: t.name, phases: t.phases })));
+  }
   app.listen(PORT, () => console.log(`\n  Task Desk running:  http://localhost:${PORT}\n`));
 }
 start().catch((e) => {
