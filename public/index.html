@@ -346,6 +346,23 @@
   .btn-ghost:hover { background: #fff; }
   .btn-primary { background: var(--accent); border: 0; color: #fff; }
   .btn-primary:hover { filter: brightness(1.07); }
+  .add-btn.ghost-btn { background: var(--panel); color: var(--ink); border: 1px solid var(--line-strong); box-shadow: var(--shadow); }
+  .add-btn.ghost-btn:hover { filter: none; border-color: var(--accent); color: var(--accent); }
+  .modal.wide { max-width: 600px; }
+  .pj-phases { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .pj-row { display: flex; align-items: center; gap: 11px; padding: 10px 13px; }
+  .pj-row + .pj-row { border-top: 1px solid var(--line); }
+  .pj-main { flex: 1; min-width: 0; }
+  .pj-name { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pj-cls { display: inline-block; font-size: 11px; color: var(--accent); background: var(--accent-soft); padding: 1px 7px; border-radius: 5px; margin-top: 3px; }
+  .pj-who { flex: 0 0 128px; }
+  .pj-who label, .pj-due label { display: block; font-size: 10px; color: var(--none); margin-bottom: 2px; letter-spacing: .03em; }
+  .pj-who select { width: 100%; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 5px 8px; background: var(--paper); }
+  .pj-due { flex: 0 0 138px; }
+  .pj-due-input { width: 100%; font: inherit; font-size: 12.5px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 5px 8px; background: var(--paper); color: var(--ink); }
+  .pj-due-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pj-summary { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .pj-summary b { color: var(--ink); }
 
   .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .signout {
@@ -434,6 +451,10 @@
       <span id="doneToggleLabel">Hide done</span>
     </button>
     <div class="spacer"></div>
+    <button class="add-btn ghost-btn" id="openProj">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+      New project
+    </button>
     <button class="add-btn" id="openAdd">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       Add task
@@ -538,6 +559,39 @@
     <div class="modal-actions">
       <button class="btn-ghost" id="cancelBtn">Cancel</button>
       <button class="btn-primary" id="saveBtn">Add task</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="projScrim">
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="projTitle">
+    <h2 id="projTitle">New project from template</h2>
+    <div class="row2">
+      <div class="field">
+        <label for="pj-template">Template</label>
+        <select id="pj-template"></select>
+      </div>
+      <div class="field">
+        <label for="pj-start">Start date</label>
+        <input id="pj-start" type="date" />
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="pj-so">SO number</label>
+        <input id="pj-so" placeholder="SO-1234" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="pj-customer">Customer</label>
+        <input id="pj-customer" placeholder="Acme" autocomplete="off" />
+      </div>
+    </div>
+    <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; letter-spacing:.02em;">Phases</label>
+    <div id="pj-phases" class="pj-phases"></div>
+    <div class="pj-summary" id="pj-summary"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="pj-cancel">Cancel</button>
+      <button class="btn-primary" id="pj-create">Create project</button>
     </div>
   </div>
 </div>
@@ -1033,6 +1087,126 @@ async function saveTask() {
 
 /* ---------- events ---------- */
 $("#openAdd").onclick = () => openModal(null);
+
+/* ---------- new project from template ---------- */
+let templatesCache = null;
+const pjParse = (s) => new Date(s + "T00:00:00Z");
+const pjFmtISO = (d) => d.toISOString().slice(0, 10);
+const pjIsWknd = (d) => d.getUTCDay() === 0 || d.getUTCDay() === 6;
+function pjEnsureBiz(d){ const x=new Date(d); while(pjIsWknd(x)) x.setUTCDate(x.getUTCDate()+1); return x; }
+function pjAddBiz(d,n){ const x=new Date(d); let a=0; while(a<n){ x.setUTCDate(x.getUTCDate()+1); if(!pjIsWknd(x)) a++; } return x; }
+function pjNextBiz(d){ const x=new Date(d); do{ x.setUTCDate(x.getUTCDate()+1);}while(pjIsWknd(x)); return x; }
+function pjSchedule(startYMD, phases){
+  let cursor = pjEnsureBiz(pjParse(startYMD));
+  return phases.map(p => { const end = pjAddBiz(cursor, Math.max(1,p.durationDays)-1); cursor = pjNextBiz(end); return end; });
+}
+const pjPretty = (d) => d.toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", timeZone:"UTC" });
+
+function pjLeastLoaded(pool){
+  const counts = {}; tasks.forEach(t => { if (!t.done && t.who) counts[t.who] = (counts[t.who]||0)+1; });
+  let best = pool[0], bc = Infinity;
+  for (const p of pool){ const c = counts[p]||0; if (c < bc){ bc = c; best = p; } }
+  return best;
+}
+function pjCurrentTemplate(){ return (templatesCache||[]).find(t => t.id === $("#pj-template").value); }
+
+function pjRenderPhases(){
+  const tpl = pjCurrentTemplate(); if (!tpl) return;
+  $("#pj-phases").innerHTML = tpl.phases.map((p, i) => {
+    const def = pjLeastLoaded(p.pool);
+    const opts = p.pool.map(name => `<option ${name===def?"selected":""}>${esc(name)}</option>`).join("");
+    const clsTag = (p.cls && p.cls.length) ? `<span class="pj-cls">${p.cls.map(esc).join(", ")}</span>` : "";
+    return `<div class="pj-row">
+      <div class="pj-main"><div class="pj-name">${esc(p.name)}</div>${clsTag}</div>
+      <div class="pj-who"><label>Assignee</label><select data-phase="${i}">${opts}</select></div>
+      <div class="pj-due"><label>Due</label><input type="date" class="pj-due-input" data-due="${i}" /></div>
+    </div>`;
+  }).join("");
+  pjRecompute();
+}
+function pjRecompute(){
+  const tpl = pjCurrentTemplate(); if (!tpl) return;
+  const start = $("#pj-start").value;
+  if (start) {
+    const ends = pjSchedule(start, tpl.phases);
+    ends.forEach((d, i) => { const el = $(`[data-due="${i}"]`); if (el) el.value = pjFmtISO(d); });
+  }
+  pjSummary();
+}
+// editing one phase's date cascades the phases after it so they stay sequential
+function pjCascadeFrom(i){
+  const tpl = pjCurrentTemplate(); if (!tpl) return;
+  const edited = $(`[data-due="${i}"]`).value;
+  if (!edited) { pjSummary(); return; }
+  let cursor = pjParse(edited);
+  for (let j = i + 1; j < tpl.phases.length; j++) {
+    const start = pjNextBiz(cursor);
+    const end = pjAddBiz(start, Math.max(1, tpl.phases[j].durationDays) - 1);
+    const el = $(`[data-due="${j}"]`); if (el) el.value = pjFmtISO(end);
+    cursor = end;
+  }
+  pjSummary();
+}
+function pjSummary(){
+  const tpl = pjCurrentTemplate(); if (!tpl) return;
+  if (!$("#pj-start").value) { $("#pj-summary").textContent = "Pick a start date to schedule the phases."; return; }
+  const so = $("#pj-so").value.trim(), cust = $("#pj-customer").value.trim();
+  const project = [so, cust].filter(Boolean).join(" ") || "…";
+  $("#pj-summary").innerHTML = `Creates <b>${tpl.phases.length} tasks</b> under project <b>${esc(project)}</b>. Dates are editable — tweak any phase.`;
+}
+
+async function openProjModal(){
+  if (!templatesCache) {
+    try { const r = await fetch("/api/templates"); templatesCache = r.ok ? await r.json() : []; }
+    catch (e) { templatesCache = []; }
+  }
+  if (!templatesCache.length) { alert("No templates available."); return; }
+  $("#pj-template").innerHTML = templatesCache.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+  $("#pj-start").value = todayStr();
+  $("#pj-so").value = ""; $("#pj-customer").value = "";
+  pjRenderPhases();
+  $("#projScrim").classList.add("open");
+}
+function closeProjModal(){ $("#projScrim").classList.remove("open"); }
+
+async function createProject(){
+  const tpl = pjCurrentTemplate(); if (!tpl) return;
+  const so = $("#pj-so").value.trim(), customer = $("#pj-customer").value.trim();
+  if (!so && !customer) { $("#pj-so").focus(); $("#pj-summary").textContent = "Enter an SO number or customer first."; return; }
+  if (!$("#pj-start").value) { $("#pj-start").focus(); return; }
+  const assignments = {};
+  document.querySelectorAll("#pj-phases select[data-phase]").forEach(s => { assignments[s.dataset.phase] = s.value; });
+  const dues = [...document.querySelectorAll("#pj-phases .pj-due-input")].map(i => i.value);
+  const btn = $("#pj-create"); btn.disabled = true; btn.textContent = "Creating…";
+  try {
+    const r = await fetch("/api/projects/from-template", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId: tpl.id, so, customer, startDate: $("#pj-start").value, assignments, dues }),
+    });
+    const data = await r.json();
+    if (!r.ok) { $("#pj-summary").textContent = data.error || "Couldn't create the project."; return; }
+    data.tasks.forEach(t => tasks.push(t));
+    closeProjModal();
+    setView("tasks");
+    sortMode = "project"; [...$("#sortSeg").children].forEach(x => x.setAttribute("aria-pressed", x.dataset.sort === "project"));
+    render();
+  } catch (e) {
+    $("#pj-summary").textContent = "Couldn't reach the server.";
+  } finally { btn.disabled = false; btn.textContent = "Create project"; }
+}
+
+$("#openProj").onclick = openProjModal;
+$("#pj-cancel").onclick = closeProjModal;
+$("#pj-create").onclick = createProject;
+$("#pj-template").addEventListener("change", pjRenderPhases);
+$("#pj-start").addEventListener("input", pjRecompute);           // reseed all phase dates
+$("#pj-so").addEventListener("input", pjSummary);                // text fields only update the summary
+$("#pj-customer").addEventListener("input", pjSummary);
+$("#pj-phases").addEventListener("change", e => {                 // editing a phase date cascades the rest
+  const inp = e.target.closest(".pj-due-input");
+  if (inp) pjCascadeFrom(Number(inp.dataset.due));
+});
+$("#projScrim").addEventListener("click", e => { if (e.target.id === "projScrim") closeProjModal(); });
 
 function readView() {
   try { const v = localStorage.getItem("taskdesk:view"); return ["tasks","dashboard","calendar","assistant"].includes(v) ? v : "dashboard"; }

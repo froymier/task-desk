@@ -147,7 +147,42 @@ app.get("/api/me", requireAuth, (req, res) => {
   res.json({ name: USERS[req.username].name });
 });
 
+// ---- project templates (v1: code-defined; a template manager can move these to the DB later) ----
+const TEMPLATES = [
+  {
+    id: "sales-order",
+    name: "Sales Order",
+    phases: [
+      { name: "Design Schematics",        durationDays: 5, cls: ["Schematics / Panels"],        pool: ["Ben","Tono","Alejandra","Javier","Angel B"] },
+      { name: "Review Schematics",        durationDays: 1, cls: ["Schematics / Panels"],        pool: ["Miguel"] },
+      { name: "PLC Programming",          durationDays: 5, cls: ["PLC Prog"],                   pool: ["Froy","Franco","Gil","Paco","Marcelo","Angel G"] },
+      { name: "HMI Programming",          durationDays: 5, cls: ["HMI / SCADA"],                pool: ["Marcelo","Angel G","Franco"] },
+      { name: "Testing & Commissioning",  durationDays: 5, cls: ["Testing and Troubleshooting"],pool: ["Angel G","Marcelo","Franco","Tono"] },
+      { name: "Serial Plates Manufacture",durationDays: 2, cls: ["BOMs / Parts"],               pool: ["Alejandra"] },
+    ],
+  },
+];
+
+// business-day scheduling (skips Sat/Sun), all in UTC to avoid timezone drift
+const parseYMD = (s) => new Date(s + "T00:00:00Z");
+const fmtYMD = (d) => d.toISOString().slice(0, 10);
+const isWknd = (d) => d.getUTCDay() === 0 || d.getUTCDay() === 6;
+function ensureBiz(d) { const x = new Date(d); while (isWknd(x)) x.setUTCDate(x.getUTCDate()+1); return x; }
+function addBiz(d, n) { const x = new Date(d); let a = 0; while (a < n) { x.setUTCDate(x.getUTCDate()+1); if (!isWknd(x)) a++; } return x; }
+function nextBiz(d) { const x = new Date(d); do { x.setUTCDate(x.getUTCDate()+1); } while (isWknd(x)); return x; }
+function scheduleDues(startYMD, phases) {
+  let cursor = ensureBiz(parseYMD(startYMD));
+  return phases.map((p) => {
+    const end = addBiz(cursor, Math.max(1, p.durationDays) - 1);
+    cursor = nextBiz(end);
+    return fmtYMD(end);
+  });
+}
+
 // ---- routes ----
+// Lightweight, public health check — used by uptime pingers to keep the service warm.
+app.get("/healthz", (req, res) => res.type("text").send("ok"));
+
 app.get("/api/tasks", requireAuth, async (req, res) => {
   try {
     const docs = await tasks.find().sort({ createdAt: 1 }).toArray();
@@ -195,6 +230,43 @@ app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: "Could not delete task" });
+  }
+});
+
+// ---- project templates ----
+app.get("/api/templates", requireAuth, (req, res) => res.json(TEMPLATES));
+
+app.post("/api/projects/from-template", requireAuth, async (req, res) => {
+  try {
+    const { templateId, so, customer, startDate, assignments, dues: clientDues } = req.body || {};
+    const tpl = TEMPLATES.find((t) => t.id === templateId);
+    if (!tpl) return res.status(400).json({ error: "Unknown template" });
+    if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return res.status(400).json({ error: "Pick a valid start date" });
+    const project = [String(so || "").trim(), String(customer || "").trim()].filter(Boolean).join(" ");
+    if (!project) return res.status(400).json({ error: "Enter an SO number or customer" });
+
+    // Use the dates from the dialog (which the user may have adjusted) when they're valid; otherwise schedule them.
+    const validDues = Array.isArray(clientDues) && clientDues.length === tpl.phases.length
+      && clientDues.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    const dues = validDues ? clientDues : scheduleDues(startDate, tpl.phases);
+    const now = Date.now();
+    const docs = tpl.phases.map((p, i) => ({
+      title: p.name,
+      who: (assignments && assignments[i]) ? String(assignments[i]) : (p.pool[0] || ""),
+      cls: Array.isArray(p.cls) ? p.cls : [],
+      project,
+      due: dues[i],
+      notes: "",
+      done: false,
+      completedAt: null,
+      createdAt: now + i,
+    }));
+    const r = await tasks.insertMany(docs);
+    const created = docs.map((d, i) => out({ ...d, _id: r.insertedIds[i] }));
+    res.json({ tasks: created, project });
+  } catch (e) {
+    console.error("from-template error", e);
+    res.status(500).json({ error: "Could not create the project" });
   }
 });
 
