@@ -371,6 +371,8 @@
   .set-row { display: flex; align-items: center; gap: 7px; }
   .set-inp { flex: 1; min-width: 0; font: inherit; font-size: 13.5px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 9px; background: var(--paper); color: var(--ink); }
   .set-inp:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .set-locked { flex: 1; min-width: 0; font-size: 13.5px; color: var(--muted); padding: 6px 9px; border: 1px dashed var(--line-strong); border-radius: 7px; background: var(--paper); display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .set-usertag { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 999px; font-weight: 600; flex: 0 0 auto; }
   .link-btn { background: none; border: 0; color: var(--accent); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; padding: 0 0 12px; }
   .link-btn:hover { text-decoration: underline; }
   .tmpl-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
@@ -1703,11 +1705,22 @@ async function loadSettings() {
 function setRow(val, kind) {
   return `<div class="set-row"><input class="set-inp" data-kind="${kind}" value="${esc(val)}" placeholder="${kind==='people'?'Name':'Class name'}" autocomplete="off"><button type="button" class="te-mini rm set-rm" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
 }
+function lockedPersonRow(name) {
+  return `<div class="set-row"><span class="set-locked">${esc(name)} <span class="set-usertag">user</span></span></div>`;
+}
+// People editor: manual people are editable; login users show as read-only rows (managed in Users).
+function renderPeopleEditor() {
+  const userSet = new Set(APP_USER_PEOPLE.map(n => String(n).trim().toLowerCase()));
+  const manual = APP_PEOPLE.filter(p => !userSet.has(String(p).trim().toLowerCase()));
+  const manualRows = manual.map(p => setRow(p, "people")).join("");
+  const userRows = APP_USER_PEOPLE.slice().sort((a, b) => a.localeCompare(b)).map(lockedPersonRow).join("");
+  $("#set-people").innerHTML = (manualRows + userRows) || setRow("", "people");
+}
 function openSettings() {
   if (!IS_ADMIN) return;   // settings panel is admin-only
   $("#set-title").value = APP_TITLE;
   $("#set-subtitle").value = APP_SUBTITLE;
-  $("#set-people").innerHTML = (APP_PEOPLE.length ? APP_PEOPLE : [""]).map(p => setRow(p, "people")).join("");
+  renderPeopleEditor();
   $("#set-classes").innerHTML = (APP_CLASSES.length ? APP_CLASSES : [""]).map(c => setRow(c, "classes")).join("");
   $("#set-err").textContent = "";
   renderUserList();
