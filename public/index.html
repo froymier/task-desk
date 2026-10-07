@@ -313,11 +313,12 @@
     background: var(--panel); width: 100%; max-width: 480px; border-radius: 18px 18px 0 0;
     padding: 22px 22px 26px; box-shadow: 0 -8px 40px rgba(28,27,34,.18);
     animation: rise .22s ease;
+    max-height: 92vh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   }
   @keyframes rise { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
   @media (min-width: 560px) {
     .scrim { align-items: center; padding: 20px; }
-    .modal { border-radius: 18px; animation: pop .18s ease; }
+    .modal { border-radius: 18px; animation: pop .18s ease; max-height: 88vh; }
     @keyframes pop { from { transform: scale(.97); opacity: .5; } to { transform: none; opacity: 1; } }
   }
   .modal h2 { font-family: "Bricolage Grotesque", sans-serif; font-weight: 700; font-size: 21px; margin: 0 0 16px; letter-spacing: -.01em; }
@@ -366,7 +367,7 @@
   .set-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
   @media (max-width: 560px) { .set-cols { grid-template-columns: 1fr; gap: 18px; } }
   .set-h { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; margin-bottom: 8px; }
-  .set-list { display: flex; flex-direction: column; gap: 7px; max-height: 320px; overflow-y: auto; }
+  .set-list { display: flex; flex-direction: column; gap: 7px; }
   .set-row { display: flex; align-items: center; gap: 7px; }
   .set-inp { flex: 1; min-width: 0; font: inherit; font-size: 13.5px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 9px; background: var(--paper); color: var(--ink); }
   .set-inp:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -717,7 +718,7 @@
     </div>
 
     <div class="set-h" style="margin-top:20px">Users (login accounts)</div>
-    <div id="set-users" class="set-list" style="max-height:200px"></div>
+    <div id="set-users" class="set-list"></div>
     <button class="link-btn" id="set-adduser" type="button" style="padding-top:8px">+ Add user</button>
     <p style="font-size:12px;color:var(--none);margin:2px 0 0">User changes (add / remove / reset password) apply immediately.</p>
 
@@ -1692,6 +1693,7 @@ function setRow(val, kind) {
   return `<div class="set-row"><input class="set-inp" data-kind="${kind}" value="${esc(val)}" placeholder="${kind==='people'?'Name':'Class name'}" autocomplete="off"><button type="button" class="te-mini rm set-rm" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
 }
 function openSettings() {
+  if (!IS_ADMIN) return;   // settings panel is admin-only
   $("#set-title").value = APP_TITLE;
   $("#set-subtitle").value = APP_SUBTITLE;
   $("#set-people").innerHTML = (APP_PEOPLE.length ? APP_PEOPLE : [""]).map(p => setRow(p, "people")).join("");
