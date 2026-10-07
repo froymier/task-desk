@@ -360,13 +360,15 @@ Where each Action is one of:
 {"type":"create","task":{"title":string,"who":string,"cls":string[],"project":string,"due":"YYYY-MM-DD"|"","notes":string}}
 {"type":"update","id":string,"changes":{ }}   // changes may include any of: title, who, cls (string[]), project, due, notes, done (boolean)
 {"type":"delete","id":string}
+{"type":"shift","days":number,"businessDays":boolean,"scope":"all"|"open"|"overdue"|"done","project":string,"who":string,"ids":string[]}
 {"type":"project","template":string,"so":string,"customer":string,"startDate":"YYYY-MM-DD","assignees":{}}
 {"type":"template","name":string,"phases":[{"name":string,"durationDays":number,"cls":string[],"pool":string[]}]}
 Rules:
 - "who" must be exactly one of the valid people, or "" if unassigned.
 - "cls" items must be exactly from the valid classes list; use [] if none apply.
 - update/delete "id" must be an existing task id from Current tasks.
-- BULK EDITS: when a request matches several tasks (e.g. "move all of Aaron's open tasks to Jack", "push every Line 3 deadline out a week", "re-tag Documentation as Manuals"), return one action per matching task — don't skip any.
+- BULK EDITS: when a request changes a FIELD on several tasks (e.g. "move all of Aaron's open tasks to Jack", "re-tag Documentation as Manuals"), return one "update" action per matching task — don't skip any.
+- SHIFT DATES IN BULK: when the user wants to move many tasks' DEADLINES by an amount of time (e.g. "push all tasks a week", "move everything overdue out 3 days", "shift the Acme project 2 days earlier", "bump Gil's open tasks by 5 days"), return a SINGLE "shift" action instead of per-task updates. Set "days" (positive = later, negative = earlier), "businessDays" true only if they mean working days, and narrow the set with "scope" ("all"/"open"/"overdue"/"done"; default "open"), plus optional "project", "who", or explicit "ids". Do NOT calculate the new dates yourself and do NOT emit per-task "update" actions for a time shift — the app computes every new date exactly. Leave unused filters out.
 - BREAK DOWN A JOB: when the user describes a larger ad-hoc job with no matching template, return several "create" actions covering the phases.
 - LAUNCH A PROJECT: when the user asks to start/create a project that matches a template by name (e.g. "start a Sales Order for Acme, SO-1234, Monday"), return a SINGLE "project" action. "template" must exactly match one of the Available project templates' names. Put the order/SO number in "so" and the customer in "customer". Resolve the start date. If you have neither an SO number nor a customer, ask for it in "reply" instead of emitting the action. The app fills each phase's assignee (least-loaded from its pool) and computes the schedule — you do NOT list the phase tasks yourself.
 - TWEAK A PROPOSED PROJECT: if the user adjusts a project you just proposed (e.g. "push the start a week", "give PLC to Gil"), re-emit the SINGLE "project" action with the change applied — set the new "startDate", and/or put per-phase assignee overrides in "assignees" as { "<exact phase name>": "<person>" }. Only include phases the user specifically named; leave "assignees" as {} otherwise.

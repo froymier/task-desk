@@ -1613,6 +1613,30 @@ function asstAppend(html, cls) {
   return div;
 }
 
+function shiftDateStr(due, days, biz){
+  if (!due || !/^\d{4}-\d{2}-\d{2}$/.test(due) || !days) return due;
+  const d = pjParse(due);
+  if (!biz) { d.setUTCDate(d.getUTCDate() + days); return pjFmtISO(d); }
+  const dir = days < 0 ? -1 : 1; let n = Math.abs(days), a = 0;
+  while (a < n) { d.setUTCDate(d.getUTCDate() + dir); const g = d.getUTCDay(); if (g !== 0 && g !== 6) a++; }
+  return pjFmtISO(d);
+}
+function resolveShiftTargets(action){
+  const archKeys = archivedProjectKeys();
+  let pool = tasks.filter(t => !archKeys.has(projKey(t)) && t.due);
+  if (Array.isArray(action.ids) && action.ids.length) {
+    const set = new Set(action.ids.map(String));
+    return pool.filter(t => set.has(t.id));
+  }
+  const scope = action.scope || "open";
+  if (scope === "open") pool = pool.filter(t => !t.done);
+  else if (scope === "done") pool = pool.filter(t => t.done);
+  else if (scope === "overdue") pool = pool.filter(t => { const dd = dayDiff(t.due); return !t.done && dd !== null && dd < 0; });
+  if (action.project) { const p = String(action.project).toLowerCase(); pool = pool.filter(t => (t.project||"").toLowerCase().includes(p)); }
+  if (action.who) { const w = String(action.who).toLowerCase(); pool = pool.filter(t => (t.who||"").toLowerCase() === w); }
+  return pool;
+}
+
 function makeActionCard(action) {
   const card = document.createElement("div");
   card.className = "asst-card" + (action.type === "delete" ? " del" : "");
@@ -1635,6 +1659,37 @@ function makeActionCard(action) {
   } else if (action.type === "delete") {
     const cur = tasks.find(x => x.id === action.id);
     card.innerHTML = `<div class="asst-card-kind">Delete</div><div class="asst-card-title">${esc(cur ? cur.title : "task")}</div><div class="asst-card-meta">This task will be permanently removed.</div>`;
+  } else if (action.type === "shift") {
+    const days = parseInt(action.days, 10) || 0;
+    const biz = !!action.businessDays;
+    const targets = resolveShiftTargets(action);
+    const changes = targets.map(t => ({ t, newDue: shiftDateStr(t.due, days, biz) })).filter(c => c.newDue && c.newDue !== c.t.due);
+    const dir = days >= 0 ? `+${days}` : `${days}`;
+    const unit = (biz ? "business day" : "day") + (Math.abs(days) === 1 ? "" : "s");
+    const header = `Shift ${changes.length} task${changes.length===1?"":"s"} by ${dir} ${unit}`;
+    if (!changes.length) {
+      card.innerHTML = `<div class="asst-card-kind">Shift dates</div><div class="asst-card-title">${esc(header)}</div><div class="asst-card-meta">No matching tasks with due dates to shift.</div>`;
+      return { el: card, apply: async () => {}, isPending: () => false };
+    }
+    const rows = changes.slice(0, 12).map(c => `${esc(c.t.title)} — ${esc(c.t.due)} → <b>${esc(c.newDue)}</b>`).join("<br>");
+    const more = changes.length > 12 ? `<br>…and ${changes.length - 12} more` : "";
+    card.innerHTML = `<div class="asst-card-kind">Shift dates</div><div class="asst-card-title">${esc(header)}</div><div class="asst-card-meta">${rows}${more}</div>`;
+    const row = document.createElement("div"); row.className = "asst-card-actions";
+    const applyBtn = document.createElement("button"); applyBtn.className = "asst-apply"; applyBtn.textContent = "Apply shift";
+    const dismissBtn = document.createElement("button"); dismissBtn.className = "asst-dismiss"; dismissBtn.textContent = "Dismiss";
+    let applied = false;
+    async function doApplyShift() {
+      if (applied) return; applied = true; applyBtn.disabled = true; applyBtn.textContent = "Shifting…";
+      try {
+        await Promise.all(changes.map(async (c) => { const u = await apiUpdate(c.t.id, { due: c.newDue }); const i = tasks.findIndex(x=>x.id===c.t.id); if (i>-1) tasks[i]=u; }));
+        card.classList.add("done"); row.innerHTML = `<span class="asst-applied">✓ Shifted ${changes.length} task${changes.length===1?"":"s"}</span>`;
+        render();
+      } catch (e) { applied = false; applyBtn.disabled = false; applyBtn.textContent = "Apply shift"; }
+    }
+    applyBtn.onclick = doApplyShift;
+    dismissBtn.onclick = () => { if (applied) return; applied = true; card.classList.add("done"); row.innerHTML = `<span style="color:var(--muted);font-size:13px">Dismissed</span>`; };
+    row.appendChild(applyBtn); row.appendChild(dismissBtn); card.appendChild(row);
+    return { el: card, apply: doApplyShift, isPending: () => !applied };
   } else if (action.type === "project") {
     const tpl = (templatesCache || []).find(t => t.name.toLowerCase() === String(action.template || "").toLowerCase());
     const so = String(action.so || "").trim(), customer = String(action.customer || "").trim();
