@@ -1671,9 +1671,19 @@ function startSession(name, role) {
 }
 
 /* ---------- editable people & classes ---------- */
-function applyPeople(people) {
+let APP_USER_PEOPLE = [];   // display names of login users (except the built-in Admin)
+// Assignable people = the manual People list + the login users (minus Admin), de-duplicated.
+function mergedPeople() {
+  const seen = new Set(), out = [];
+  [...APP_PEOPLE, ...APP_USER_PEOPLE].forEach(n => {
+    const name = String(n || "").trim(), k = name.toLowerCase();
+    if (name && !seen.has(k)) { seen.add(k); out.push(name); }
+  });
+  return out;
+}
+function applyPeople() {
   const sel = $("#f-who"); const prev = sel.value;
-  sel.innerHTML = `<option value="">Unassigned</option>` + people.map(p => `<option>${esc(p)}</option>`).join("");
+  sel.innerHTML = `<option value="">Unassigned</option>` + mergedPeople().map(p => `<option>${esc(p)}</option>`).join("");
   if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
 function applyClasses(classes) {
@@ -1682,12 +1692,13 @@ function applyClasses(classes) {
 let APP_TITLE = "Task Desk", APP_SUBTITLE = "Control & Automation";
 async function loadSettings() {
   try {
-    const r = await fetch("/api/settings");
-    if (!r.ok) return;
-    const s = await r.json();
+    const [sRes, uRes] = await Promise.all([fetch("/api/settings"), fetch("/api/users")]);
+    if (!sRes.ok) return;
+    const s = await sRes.json();
     APP_PEOPLE = s.people || []; APP_CLASSES = s.classes || [];
     APP_TITLE = s.title || "Task Desk"; APP_SUBTITLE = typeof s.subtitle === "string" ? s.subtitle : "Control & Automation";
-    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES); applyBranding(APP_TITLE, APP_SUBTITLE);
+    if (uRes.ok) { const us = await uRes.json(); APP_USER_PEOPLE = us.filter(u => u.username !== "admin").map(u => u.name); }
+    applyPeople(); applyClasses(APP_CLASSES); applyBranding(APP_TITLE, APP_SUBTITLE);
   } catch (e) {}
 }
 function setRow(val, kind) {
@@ -1708,6 +1719,8 @@ async function renderUserList() {
   box.innerHTML = `<div class="dash-empty" style="padding:8px 2px">Loading…</div>`;
   try {
     const r = await fetch("/api/users"); const users = r.ok ? await r.json() : [];
+    APP_USER_PEOPLE = users.filter(u => u.username !== "admin").map(u => u.name);
+    applyPeople();   // keep the assignee list in sync with the user accounts
     box.innerHTML = users.map(u => {
       const isBuiltin = u.username === "admin";
       const isAdminRole = u.role === "admin";
@@ -1743,7 +1756,7 @@ $("#set-save").onclick = async () => {
     const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ people, classes, title, subtitle }) });
     const s = await r.json(); if (!r.ok) throw new Error();
     APP_PEOPLE = s.people; APP_CLASSES = s.classes; APP_TITLE = s.title; APP_SUBTITLE = s.subtitle;
-    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES); applyBranding(APP_TITLE, APP_SUBTITLE);
+    applyPeople(); applyClasses(APP_CLASSES); applyBranding(APP_TITLE, APP_SUBTITLE);
     closeSettings();
   } catch (e) { $("#set-err").textContent = "Couldn't save settings."; }
   finally { btn.disabled = false; btn.textContent = "Save"; }
