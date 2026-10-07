@@ -31,6 +31,10 @@ function stripFences(s) {
 const client = new MongoClient(uri);
 let tasks; // the MongoDB collection
 let templatesCol; // project templates collection
+let settingsCol; // app settings (people, classes)
+
+const DEFAULT_PEOPLE = ["Froy","Miguel","Ben","Angel B","Javier","Tono","Alejandra","Lucia","Gil","Paco","Angel G","Marcelo","Franco","Aaron","Jack","Clay"];
+const DEFAULT_CLASSES = ["PLC Prog","Computer Prog","HMI / SCADA","Schematics / Panels","BOMs / Parts","Networking","Routing","Testing and Troubleshooting","Manuals","Retrofits","Service","Prototype"];
 
 // Shape a database document into what the frontend expects.
 const out = (d) => ({
@@ -251,6 +255,28 @@ app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
   }
 });
 
+// ---- app settings (people & classes, editable in-app) ----
+const cleanList = (arr, fallback) => {
+  if (!Array.isArray(arr)) return fallback;
+  const seen = new Set(), out = [];
+  for (const x of arr) { const s = String(x || "").trim(); if (s && !seen.has(s.toLowerCase())) { seen.add(s.toLowerCase()); out.push(s); } }
+  return out.length ? out : fallback;
+};
+app.get("/api/settings", requireAuth, async (req, res) => {
+  try {
+    const doc = await settingsCol.findOne({ _id: "app" });
+    res.json({ people: (doc && doc.people) || DEFAULT_PEOPLE, classes: (doc && doc.classes) || DEFAULT_CLASSES });
+  } catch (e) { res.status(500).json({ error: "Could not load settings" }); }
+});
+app.put("/api/settings", requireAuth, async (req, res) => {
+  try {
+    const people = cleanList(req.body && req.body.people, DEFAULT_PEOPLE);
+    const classes = cleanList(req.body && req.body.classes, DEFAULT_CLASSES);
+    await settingsCol.updateOne({ _id: "app" }, { $set: { people, classes } }, { upsert: true });
+    res.json({ people, classes });
+  } catch (e) { res.status(500).json({ error: "Could not save settings" }); }
+});
+
 // ---- project templates ----
 app.get("/api/templates", requireAuth, async (req, res) => {
   try {
@@ -421,13 +447,19 @@ Rules:
 
 // ---- start ----
 const PORT = process.env.PORT || 3000;
+const DB_NAME = process.env.DB_NAME || "taskdesk";   // set a different name to run a second, separate instance on the same cluster
 async function start() {
   await client.connect();
-  tasks = client.db("taskdesk").collection("tasks");
+  const db = client.db(DB_NAME);
+  tasks = db.collection("tasks");
   await tasks.createIndex({ createdAt: 1 });
-  templatesCol = client.db("taskdesk").collection("templates");
+  templatesCol = db.collection("templates");
   if ((await templatesCol.countDocuments()) === 0) {
     await templatesCol.insertMany(DEFAULT_TEMPLATES.map((t) => ({ name: t.name, phases: t.phases })));
+  }
+  settingsCol = db.collection("settings");
+  if ((await settingsCol.countDocuments({ _id: "app" })) === 0) {
+    await settingsCol.insertOne({ _id: "app", people: DEFAULT_PEOPLE, classes: DEFAULT_CLASSES });
   }
   app.listen(PORT, () => console.log(`\n  Task Desk running:  http://localhost:${PORT}\n`));
 }

@@ -363,6 +363,13 @@
   .pj-due-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .pj-summary { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
   .pj-summary b { color: var(--ink); }
+  .set-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 560px) { .set-cols { grid-template-columns: 1fr; gap: 18px; } }
+  .set-h { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; margin-bottom: 8px; }
+  .set-list { display: flex; flex-direction: column; gap: 7px; max-height: 320px; overflow-y: auto; }
+  .set-row { display: flex; align-items: center; gap: 7px; }
+  .set-inp { flex: 1; min-width: 0; font: inherit; font-size: 13.5px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 9px; background: var(--paper); color: var(--ink); }
+  .set-inp:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .link-btn { background: none; border: 0; color: var(--accent); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; padding: 0 0 12px; }
   .link-btn:hover { text-decoration: underline; }
   .tmpl-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
@@ -440,6 +447,9 @@
         <button class="hdr-pill" id="openTmpl" title="Manage templates" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Templates
+        </button>
+        <button class="refresh" id="openSet" aria-label="Settings" title="Settings" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
         </button>
         <button class="refresh" id="refreshBtn" aria-label="Refresh" title="Refresh">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
@@ -665,6 +675,30 @@
   </div>
 </div>
 
+<div class="scrim" id="setScrim">
+  <div class="modal wide">
+    <h2>Settings</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-6px 0 16px">Edit the people and classes this app uses. Existing tasks keep their values.</p>
+    <div class="set-cols">
+      <div>
+        <div class="set-h">People</div>
+        <div id="set-people" class="set-list"></div>
+        <button class="link-btn" id="set-addperson" type="button" style="padding-top:8px">+ Add person</button>
+      </div>
+      <div>
+        <div class="set-h">Classes</div>
+        <div id="set-classes" class="set-list"></div>
+        <button class="link-btn" id="set-addclass" type="button" style="padding-top:8px">+ Add class</button>
+      </div>
+    </div>
+    <div id="set-err" style="color:var(--over);font-size:13px;min-height:16px;margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="set-cancel">Cancel</button>
+      <button class="btn-primary" id="set-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="auth-scrim" id="authScrim" hidden>
   <div class="auth-card">
     <p class="eyebrow">Control &amp; Automation</p>
@@ -692,6 +726,8 @@
 const API = "/api/tasks";
 let ME = "";   // set to the signed-in user's name; sorts first, new tasks default to you
 let tasks = [];
+let APP_PEOPLE = [];   // assignee list (editable in Settings)
+let APP_CLASSES = [];  // class list (editable in Settings)
 let sortMode = "person";
 let personFilter = null;
 let weekOnly = false;
@@ -1537,6 +1573,7 @@ function showLogin() {
   $("#authScrim").hidden = false;
   $("#signoutBtn").hidden = true;
   $("#openTmpl").hidden = true;
+  $("#openSet").hidden = true;
   $("#login-pass").disabled = false;
   setTimeout(() => $("#login-user").focus(), 60);
 }
@@ -1577,9 +1614,62 @@ function startSession(name) {
   $("#whoami").textContent = name;
   $("#signoutBtn").hidden = false;
   $("#openTmpl").hidden = false;
+  $("#openSet").hidden = false;
   hideLogin();
+  loadSettings();
   load();
 }
+
+/* ---------- editable people & classes ---------- */
+function applyPeople(people) {
+  const sel = $("#f-who"); const prev = sel.value;
+  sel.innerHTML = `<option value="">Unassigned</option>` + people.map(p => `<option>${esc(p)}</option>`).join("");
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+function applyClasses(classes) {
+  $("#f-class").innerHTML = classes.map(c => `<button type="button" class="chip-opt" data-val="${esc(c)}">${esc(c)}</button>`).join("");
+}
+async function loadSettings() {
+  try {
+    const r = await fetch("/api/settings");
+    if (!r.ok) return;
+    const s = await r.json();
+    APP_PEOPLE = s.people || []; APP_CLASSES = s.classes || [];
+    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES);
+  } catch (e) {}
+}
+function setRow(val, kind) {
+  return `<div class="set-row"><input class="set-inp" data-kind="${kind}" value="${esc(val)}" placeholder="${kind==='people'?'Name':'Class name'}" autocomplete="off"><button type="button" class="te-mini rm set-rm" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
+}
+function openSettings() {
+  $("#set-people").innerHTML = (APP_PEOPLE.length ? APP_PEOPLE : [""]).map(p => setRow(p, "people")).join("");
+  $("#set-classes").innerHTML = (APP_CLASSES.length ? APP_CLASSES : [""]).map(c => setRow(c, "classes")).join("");
+  $("#set-err").textContent = "";
+  $("#setScrim").classList.add("open");
+}
+function closeSettings() { $("#setScrim").classList.remove("open"); }
+$("#set-addperson").onclick = () => $("#set-people").insertAdjacentHTML("beforeend", setRow("", "people"));
+$("#set-addclass").onclick = () => $("#set-classes").insertAdjacentHTML("beforeend", setRow("", "classes"));
+$("#setScrim").addEventListener("click", e => {
+  if (e.target.id === "setScrim") { closeSettings(); return; }
+  const rm = e.target.closest(".set-rm"); if (rm) rm.closest(".set-row").remove();
+});
+$("#set-cancel").onclick = closeSettings;
+$("#set-save").onclick = async () => {
+  const people = [...document.querySelectorAll('#set-people .set-inp')].map(i => i.value.trim()).filter(Boolean);
+  const classes = [...document.querySelectorAll('#set-classes .set-inp')].map(i => i.value.trim()).filter(Boolean);
+  if (!people.length || !classes.length) { $("#set-err").textContent = "Keep at least one person and one class."; return; }
+  const btn = $("#set-save"); btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ people, classes }) });
+    const s = await r.json(); if (!r.ok) throw new Error();
+    APP_PEOPLE = s.people; APP_CLASSES = s.classes;
+    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES);
+    closeSettings();
+  } catch (e) { $("#set-err").textContent = "Couldn't save settings."; }
+  finally { btn.disabled = false; btn.textContent = "Save"; }
+};
+$("#openSet").onclick = openSettings;
 
 $("#login-btn").onclick = doLogin;
 $("#login-pass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
