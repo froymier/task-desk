@@ -1714,7 +1714,7 @@ function renderPeopleEditor() {
   const manual = APP_PEOPLE.filter(p => !userSet.has(String(p).trim().toLowerCase()));
   const manualRows = manual.map(p => setRow(p, "people")).join("");
   const userRows = APP_USER_PEOPLE.slice().sort((a, b) => a.localeCompare(b)).map(lockedPersonRow).join("");
-  $("#set-people").innerHTML = (manualRows + userRows) || setRow("", "people");
+  $("#set-people").innerHTML = (userRows + manualRows) || setRow("", "people");
 }
 function openSettings() {
   if (!IS_ADMIN) return;   // settings panel is admin-only
