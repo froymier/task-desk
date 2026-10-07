@@ -31,7 +31,8 @@ function stripFences(s) {
 const client = new MongoClient(uri);
 let tasks; // the MongoDB collection
 let templatesCol; // project templates collection
-let settingsCol; // app settings (people, classes)
+let settingsCol; // app settings (people, classes, header text)
+let usersCol; // login accounts
 
 const DEFAULT_PEOPLE = ["Froy","Miguel","Ben","Angel B","Javier","Tono","Alejandra","Lucia","Gil","Paco","Angel G","Marcelo","Franco","Aaron","Jack","Clay"];
 const DEFAULT_CLASSES = ["PLC Prog","Computer Prog","HMI / SCADA","Schematics / Panels","BOMs / Parts","Networking","Routing","Testing and Troubleshooting","Manuals","Retrofits","Service","Prototype"];
@@ -79,11 +80,25 @@ function clean(body, { partial } = {}) {
 // ---- auth ----
 // Passwords come from environment variables, never the code. Set them in .env
 // (and in your host's env settings). Usernames are the keys (lowercase).
-const USERS = {
-  froy:   { name: "Froy",   password: process.env.FROY_PASSWORD },
-  miguel: { name: "Miguel", password: process.env.MIGUEL_PASSWORD },
-  gil:    { name: "Gil",    password: process.env.GIL_PASSWORD },
-};
+// Users live in the DB (the "users" collection). This cache mirrors it for fast per-request auth checks.
+let userCache = {};  // username -> { name }
+async function refreshUserCache() {
+  const us = await usersCol.find({}, { projection: { salt: 0, hash: 0 } }).toArray();
+  userCache = {};
+  us.forEach((u) => { userCache[u._id] = { name: u.name, role: u.role === "admin" ? "admin" : "member" }; });
+}
+function hashPassword(pw) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(String(pw), salt, 32).toString("hex");
+  return { salt, hash };
+}
+function verifyPassword(pw, salt, hash) {
+  if (!salt || !hash || typeof pw !== "string") return false;
+  const h = crypto.scryptSync(pw, salt, 32);
+  const hb = Buffer.from(hash, "hex");
+  return h.length === hb.length && crypto.timingSafeEqual(h, hb);
+}
+const slugUser = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
 const SESSION_DAYS = 30;
 
 const sign = (payload) => crypto.createHmac("sha256", SECRET).update(payload).digest("hex");
@@ -106,12 +121,6 @@ function verifyToken(token) {
   return username;
 }
 
-function passwordMatches(input, actual) {
-  if (!actual || typeof input !== "string") return false;
-  const a = Buffer.from(input), b = Buffer.from(actual);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
 function getCookie(req, name) {
   const header = req.headers.cookie;
   if (!header) return null;
@@ -127,20 +136,27 @@ function setSessionCookie(req, res, token) {
 
 function requireAuth(req, res, next) {
   const username = verifyToken(getCookie(req, "session"));
-  if (!username || !USERS[username]) return res.status(401).json({ error: "Not signed in" });
+  if (!username || !userCache[username]) return res.status(401).json({ error: "Not signed in" });
   req.username = username;
+  req.role = userCache[username].role;
+  next();
+}
+function requireAdmin(req, res, next) {
+  if (req.role !== "admin") return res.status(403).json({ error: "Admin only" });
   next();
 }
 
-app.post("/api/login", (req, res) => {
-  const username = String((req.body && req.body.username) || "").trim().toLowerCase();
+app.post("/api/login", async (req, res) => {
+  const username = slugUser(req.body && req.body.username);
   const password = (req.body && req.body.password) || "";
-  const user = USERS[username];
-  if (!user || !passwordMatches(password, user.password)) {
-    return res.status(401).json({ error: "Wrong user or password" });
-  }
-  setSessionCookie(req, res, makeToken(username));
-  res.json({ name: user.name });
+  try {
+    const user = await usersCol.findOne({ _id: username });
+    if (!user || !verifyPassword(password, user.salt, user.hash)) {
+      return res.status(401).json({ error: "Wrong user or password" });
+    }
+    setSessionCookie(req, res, makeToken(username));
+    res.json({ name: user.name, role: user.role === "admin" ? "admin" : "member" });
+  } catch (e) { res.status(500).json({ error: "Login failed" }); }
 });
 
 app.post("/api/logout", (req, res) => {
@@ -149,7 +165,73 @@ app.post("/api/logout", (req, res) => {
 });
 
 app.get("/api/me", requireAuth, (req, res) => {
-  res.json({ name: USERS[req.username].name });
+  res.json({ name: userCache[req.username].name, role: req.role });
+});
+
+// Any signed-in user can change THEIR OWN password (must supply the current one).
+app.post("/api/me/password", requireAuth, async (req, res) => {
+  try {
+    const current = String((req.body && req.body.currentPassword) || "");
+    const next = String((req.body && req.body.newPassword) || "");
+    if (next.length < 4) return res.status(400).json({ error: "New password must be at least 4 characters" });
+    const u = await usersCol.findOne({ _id: req.username });
+    if (!u || !verifyPassword(current, u.salt, u.hash)) return res.status(401).json({ error: "Current password is incorrect" });
+    const { salt, hash } = hashPassword(next);
+    await usersCol.updateOne({ _id: req.username }, { $set: { salt, hash } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: "Could not change password" }); }
+});
+
+// ---- users (login accounts) ----
+// Public: usernames + display names + role, so the login screen can list them.
+app.get("/api/users", (req, res) => {
+  res.json(Object.entries(userCache).map(([username, v]) => ({ username, name: v.name, role: v.role })).sort((a, b) => a.name.localeCompare(b.name)));
+});
+// Everything that manages OTHER accounts is admin-only.
+app.post("/api/users", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const username = slugUser(req.body && req.body.username);
+    const name = String((req.body && req.body.name) || "").trim() || username;
+    const password = String((req.body && req.body.password) || "");
+    if (!username) return res.status(400).json({ error: "Username required (letters, numbers, . _ -)" });
+    if (username === "admin") return res.status(409).json({ error: "That username is reserved" });
+    if (password.length < 4) return res.status(400).json({ error: "Password must be at least 4 characters" });
+    if (await usersCol.findOne({ _id: username })) return res.status(409).json({ error: "That username already exists" });
+    const { salt, hash } = hashPassword(password);
+    await usersCol.insertOne({ _id: username, name, role: "member", salt, hash });
+    await refreshUserCache();
+    res.json({ username, name });
+  } catch (e) { res.status(500).json({ error: "Could not add user" }); }
+});
+app.put("/api/users/:username", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const username = slugUser(req.params.username);
+    const u = await usersCol.findOne({ _id: username });
+    if (!u) return res.status(404).json({ error: "No such user" });
+    const set = {};
+    if (req.body && typeof req.body.name === "string" && req.body.name.trim() && username !== "admin") set.name = req.body.name.trim();
+    if (req.body && req.body.password) {
+      if (String(req.body.password).length < 4) return res.status(400).json({ error: "Password must be at least 4 characters" });
+      const { salt, hash } = hashPassword(String(req.body.password)); set.salt = salt; set.hash = hash;
+    }
+    // Promote/demote. The built-in "admin" account always stays admin.
+    if (req.body && typeof req.body.role === "string" && username !== "admin") {
+      set.role = req.body.role === "admin" ? "admin" : "member";
+    }
+    if (Object.keys(set).length) await usersCol.updateOne({ _id: username }, { $set: set });
+    await refreshUserCache();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: "Could not update user" }); }
+});
+app.delete("/api/users/:username", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const username = slugUser(req.params.username);
+    if (username === "admin") return res.status(400).json({ error: "The Admin account can't be removed" });
+    if ((await usersCol.countDocuments()) <= 1) return res.status(400).json({ error: "Can't remove the last user" });
+    await usersCol.deleteOne({ _id: username });
+    await refreshUserCache();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: "Could not remove user" }); }
 });
 
 // ---- project templates (stored in MongoDB; the Sales Order one is seeded on first run) ----
@@ -255,6 +337,14 @@ app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
   }
 });
 
+// Public branding (title + subtitle) for the login screen, which renders before sign-in.
+app.get("/api/branding", async (req, res) => {
+  try {
+    const doc = await settingsCol.findOne({ _id: "app" });
+    res.json({ title: (doc && doc.title) || "Task Desk", subtitle: (doc && typeof doc.subtitle === "string") ? doc.subtitle : "Control & Automation" });
+  } catch (e) { res.json({ title: "Task Desk", subtitle: "Control & Automation" }); }
+});
+
 // ---- app settings (people & classes, editable in-app) ----
 const cleanList = (arr, fallback) => {
   if (!Array.isArray(arr)) return fallback;
@@ -265,15 +355,22 @@ const cleanList = (arr, fallback) => {
 app.get("/api/settings", requireAuth, async (req, res) => {
   try {
     const doc = await settingsCol.findOne({ _id: "app" });
-    res.json({ people: (doc && doc.people) || DEFAULT_PEOPLE, classes: (doc && doc.classes) || DEFAULT_CLASSES });
+    res.json({
+      people: (doc && doc.people) || DEFAULT_PEOPLE,
+      classes: (doc && doc.classes) || DEFAULT_CLASSES,
+      title: (doc && doc.title) || "Task Desk",
+      subtitle: (doc && typeof doc.subtitle === "string") ? doc.subtitle : "Control & Automation",
+    });
   } catch (e) { res.status(500).json({ error: "Could not load settings" }); }
 });
-app.put("/api/settings", requireAuth, async (req, res) => {
+app.put("/api/settings", requireAuth, requireAdmin, async (req, res) => {
   try {
     const people = cleanList(req.body && req.body.people, DEFAULT_PEOPLE);
     const classes = cleanList(req.body && req.body.classes, DEFAULT_CLASSES);
-    await settingsCol.updateOne({ _id: "app" }, { $set: { people, classes } }, { upsert: true });
-    res.json({ people, classes });
+    const title = (String((req.body && req.body.title) || "").trim()) || "Task Desk";
+    const subtitle = String((req.body && req.body.subtitle) || "").trim();   // may be blank
+    await settingsCol.updateOne({ _id: "app" }, { $set: { people, classes, title, subtitle } }, { upsert: true });
+    res.json({ people, classes, title, subtitle });
   } catch (e) { res.status(500).json({ error: "Could not save settings" }); }
 });
 
@@ -459,8 +556,33 @@ async function start() {
   }
   settingsCol = db.collection("settings");
   if ((await settingsCol.countDocuments({ _id: "app" })) === 0) {
-    await settingsCol.insertOne({ _id: "app", people: DEFAULT_PEOPLE, classes: DEFAULT_CLASSES });
+    await settingsCol.insertOne({ _id: "app", people: DEFAULT_PEOPLE, classes: DEFAULT_CLASSES, title: "Task Desk", subtitle: "Control & Automation" });
   }
+  usersCol = db.collection("users");
+  // Seed member accounts on first run (from INIT_USER, else the legacy trio).
+  if ((await usersCol.countDocuments({ role: { $ne: "admin" } })) === 0) {
+    const seeds = [];
+    if (process.env.INIT_USER) {
+      seeds.push([process.env.INIT_USER, process.env.INIT_USER, process.env.INIT_PASSWORD || "changeme"]);
+    } else {
+      [["froy", "Froy", process.env.FROY_PASSWORD], ["miguel", "Miguel", process.env.MIGUEL_PASSWORD], ["gil", "Gil", process.env.GIL_PASSWORD]]
+        .forEach((x) => { if (x[2]) seeds.push(x); });
+    }
+    for (const [u, n, pw] of seeds) {
+      const id = slugUser(u); if (!id || id === "admin") continue;
+      if (await usersCol.findOne({ _id: id })) continue;
+      const { salt, hash } = hashPassword(pw);
+      await usersCol.insertOne({ _id: id, name: n, role: "member", salt, hash });
+    }
+  }
+  // The built-in Admin always exists (full permissions). Password from ADMIN_PASSWORD on first creation, else "admin".
+  if (!(await usersCol.findOne({ _id: "admin" }))) {
+    const { salt, hash } = hashPassword(process.env.ADMIN_PASSWORD || "admin");
+    await usersCol.insertOne({ _id: "admin", name: "Admin", role: "admin", salt, hash });
+  } else {
+    await usersCol.updateOne({ _id: "admin" }, { $set: { role: "admin" } });   // never let Admin lose admin
+  }
+  await refreshUserCache();
   app.listen(PORT, () => console.log(`\n  Task Desk running:  http://localhost:${PORT}\n`));
 }
 start().catch((e) => {

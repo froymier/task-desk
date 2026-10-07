@@ -439,14 +439,17 @@
   <header>
     <div class="head-row">
       <div>
-        <p class="eyebrow">Control &amp; Automation</p>
-        <h1>Task Desk</h1>
+        <p class="eyebrow" id="appSubtitle">Control &amp; Automation</p>
+        <h1 id="appTitle">Task Desk</h1>
         <p class="summary" id="summary">Loading…</p>
       </div>
       <div class="head-actions">
         <button class="hdr-pill" id="openTmpl" title="Manage templates" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Templates
+        </button>
+        <button class="refresh" id="openPwd" aria-label="Change password" title="Change my password" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.6 7.6a5 5 0 1 1-7.1 7.1 5 5 0 0 1 7.1-7.1Zm0 0L15 8m0 0l3 3m-3-3l2.5-2.5"/></svg>
         </button>
         <button class="refresh" id="openSet" aria-label="Settings" title="Settings" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
@@ -675,10 +678,31 @@
   </div>
 </div>
 
+<div class="scrim" id="pwdScrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>Change my password</h2>
+    <div class="field"><label for="pwd-cur">Current password</label><input id="pwd-cur" type="password" autocomplete="current-password" /></div>
+    <div class="field"><label for="pwd-new">New password</label><input id="pwd-new" type="password" autocomplete="new-password" /></div>
+    <div class="field"><label for="pwd-conf">Confirm new password</label><input id="pwd-conf" type="password" autocomplete="new-password" /></div>
+    <div id="pwd-err" style="color:var(--over);font-size:13px;min-height:16px"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="pwd-cancel">Cancel</button>
+      <button class="btn-primary" id="pwd-save">Change password</button>
+    </div>
+  </div>
+</div>
+
 <div class="scrim" id="setScrim">
   <div class="modal wide">
     <h2>Settings</h2>
-    <p style="font-size:13px;color:var(--muted);margin:-6px 0 16px">Edit the people and classes this app uses. Existing tasks keep their values.</p>
+    <p style="font-size:13px;color:var(--muted);margin:-6px 0 16px">Customize this app. Existing tasks keep their values. Changes apply after you Save.</p>
+
+    <div class="set-h">Header</div>
+    <div class="row2" style="margin-bottom:18px">
+      <div class="field" style="margin:0"><label for="set-title">App title</label><input id="set-title" placeholder="Task Desk" autocomplete="off" /></div>
+      <div class="field" style="margin:0"><label for="set-subtitle">Subtitle (team or company)</label><input id="set-subtitle" placeholder="(optional)" autocomplete="off" /></div>
+    </div>
+
     <div class="set-cols">
       <div>
         <div class="set-h">People</div>
@@ -691,6 +715,12 @@
         <button class="link-btn" id="set-addclass" type="button" style="padding-top:8px">+ Add class</button>
       </div>
     </div>
+
+    <div class="set-h" style="margin-top:20px">Users (login accounts)</div>
+    <div id="set-users" class="set-list" style="max-height:200px"></div>
+    <button class="link-btn" id="set-adduser" type="button" style="padding-top:8px">+ Add user</button>
+    <p style="font-size:12px;color:var(--none);margin:2px 0 0">User changes (add / remove / reset password) apply immediately.</p>
+
     <div id="set-err" style="color:var(--over);font-size:13px;min-height:16px;margin-top:8px"></div>
     <div class="modal-actions">
       <button class="btn-ghost" id="set-cancel">Cancel</button>
@@ -701,16 +731,13 @@
 
 <div class="auth-scrim" id="authScrim" hidden>
   <div class="auth-card">
-    <p class="eyebrow">Control &amp; Automation</p>
-    <h1 style="font-size:25px; letter-spacing:-.02em; margin:2px 0 4px;">Task Desk</h1>
+    <p class="eyebrow" id="loginSubtitle">Control &amp; Automation</p>
+    <h1 id="loginTitle" style="font-size:25px; letter-spacing:-.02em; margin:2px 0 4px;">Task Desk</h1>
     <p style="color:var(--muted); font-size:13px; margin:0 0 20px;">Sign in to continue</p>
     <div class="field">
       <label for="login-user">User</label>
       <select id="login-user">
         <option value="">Choose…</option>
-        <option value="froy">Froy</option>
-        <option value="miguel">Miguel</option>
-        <option value="gil">Gil</option>
       </select>
     </div>
     <div class="field">
@@ -728,6 +755,7 @@ let ME = "";   // set to the signed-in user's name; sorts first, new tasks defau
 let tasks = [];
 let APP_PEOPLE = [];   // assignee list (editable in Settings)
 let APP_CLASSES = [];  // class list (editable in Settings)
+let IS_ADMIN = false;  // true only for the built-in Admin
 let sortMode = "person";
 let personFilter = null;
 let weekOnly = false;
@@ -1569,12 +1597,30 @@ list.addEventListener("click", async e => {
 });
 
 /* ---------- auth ---------- */
+function applyBranding(title, subtitle) {
+  const t = title || "Task Desk";
+  ["#appTitle", "#loginTitle"].forEach(s => { const el = $(s); if (el) el.textContent = t; });
+  ["#appSubtitle", "#loginSubtitle"].forEach(s => { const el = $(s); if (el) { el.textContent = subtitle || ""; el.style.display = subtitle ? "" : "none"; } });
+  document.title = t;
+}
+async function loadLoginScreen() {
+  try {
+    const [bRes, uRes] = await Promise.all([fetch("/api/branding"), fetch("/api/users")]);
+    if (bRes.ok) { const b = await bRes.json(); applyBranding(b.title, b.subtitle); }
+    if (uRes.ok) {
+      const users = await uRes.json();
+      $("#login-user").innerHTML = `<option value="">Choose…</option>` + users.map(u => `<option value="${esc(u.username)}">${esc(u.name)}</option>`).join("");
+    }
+  } catch (e) {}
+}
 function showLogin() {
   $("#authScrim").hidden = false;
   $("#signoutBtn").hidden = true;
   $("#openTmpl").hidden = true;
   $("#openSet").hidden = true;
+  $("#openPwd").hidden = true;
   $("#login-pass").disabled = false;
+  loadLoginScreen();
   setTimeout(() => $("#login-user").focus(), 60);
 }
 function hideLogin() {
@@ -1594,7 +1640,7 @@ async function doLogin() {
     const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
     if (!r.ok) { err.textContent = "Wrong user or password."; return; }
     const data = await r.json();
-    startSession(data.name);
+    startSession(data.name, data.role);
     $("#login-pass").value = "";
   } catch (e) {
     err.textContent = "Couldn't reach the server.";
@@ -1609,12 +1655,14 @@ async function doLogout() {
   showLogin();
 }
 
-function startSession(name) {
+function startSession(name, role) {
   ME = name;
+  IS_ADMIN = role === "admin";
   $("#whoami").textContent = name;
   $("#signoutBtn").hidden = false;
   $("#openTmpl").hidden = false;
-  $("#openSet").hidden = false;
+  $("#openPwd").hidden = false;          // change own password — everyone
+  $("#openSet").hidden = !IS_ADMIN;      // settings (people/classes/header/users) — admin only
   hideLogin();
   loadSettings();
   load();
@@ -1629,23 +1677,49 @@ function applyPeople(people) {
 function applyClasses(classes) {
   $("#f-class").innerHTML = classes.map(c => `<button type="button" class="chip-opt" data-val="${esc(c)}">${esc(c)}</button>`).join("");
 }
+let APP_TITLE = "Task Desk", APP_SUBTITLE = "Control & Automation";
 async function loadSettings() {
   try {
     const r = await fetch("/api/settings");
     if (!r.ok) return;
     const s = await r.json();
     APP_PEOPLE = s.people || []; APP_CLASSES = s.classes || [];
-    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES);
+    APP_TITLE = s.title || "Task Desk"; APP_SUBTITLE = typeof s.subtitle === "string" ? s.subtitle : "Control & Automation";
+    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES); applyBranding(APP_TITLE, APP_SUBTITLE);
   } catch (e) {}
 }
 function setRow(val, kind) {
   return `<div class="set-row"><input class="set-inp" data-kind="${kind}" value="${esc(val)}" placeholder="${kind==='people'?'Name':'Class name'}" autocomplete="off"><button type="button" class="te-mini rm set-rm" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
 }
 function openSettings() {
+  $("#set-title").value = APP_TITLE;
+  $("#set-subtitle").value = APP_SUBTITLE;
   $("#set-people").innerHTML = (APP_PEOPLE.length ? APP_PEOPLE : [""]).map(p => setRow(p, "people")).join("");
   $("#set-classes").innerHTML = (APP_CLASSES.length ? APP_CLASSES : [""]).map(c => setRow(c, "classes")).join("");
   $("#set-err").textContent = "";
+  renderUserList();
   $("#setScrim").classList.add("open");
+}
+async function renderUserList() {
+  const box = $("#set-users"); if (!box) return;
+  box.innerHTML = `<div class="dash-empty" style="padding:8px 2px">Loading…</div>`;
+  try {
+    const r = await fetch("/api/users"); const users = r.ok ? await r.json() : [];
+    box.innerHTML = users.map(u => {
+      const isBuiltin = u.username === "admin";
+      const isAdminRole = u.role === "admin";
+      const roleBtn = isBuiltin ? "" :
+        `<button type="button" class="link-btn" style="padding:0" data-role="${esc(u.username)}" data-to="${isAdminRole ? "member" : "admin"}">${isAdminRole ? "Make member" : "Make admin"}</button>`;
+      const delBtn = isBuiltin ? "" :
+        `<button type="button" class="te-mini rm" data-deluser="${esc(u.username)}" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
+      return `<div class="set-row" data-user="${esc(u.username)}">
+        <span style="flex:1;min-width:0;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b>${esc(u.name)}</b> <span style="color:var(--none)">@${esc(u.username)}${isAdminRole ? " · admin" : ""}</span></span>
+        ${roleBtn}
+        <button type="button" class="link-btn" style="padding:0" data-reset="${esc(u.username)}">Reset password</button>
+        ${delBtn}
+      </div>`;
+    }).join("") || `<div class="dash-empty" style="padding:8px 2px">No users.</div>`;
+  } catch (e) { box.innerHTML = `<div class="dash-empty" style="padding:8px 2px">Couldn't load users.</div>`; }
 }
 function closeSettings() { $("#setScrim").classList.remove("open"); }
 $("#set-addperson").onclick = () => $("#set-people").insertAdjacentHTML("beforeend", setRow("", "people"));
@@ -1659,17 +1733,75 @@ $("#set-save").onclick = async () => {
   const people = [...document.querySelectorAll('#set-people .set-inp')].map(i => i.value.trim()).filter(Boolean);
   const classes = [...document.querySelectorAll('#set-classes .set-inp')].map(i => i.value.trim()).filter(Boolean);
   if (!people.length || !classes.length) { $("#set-err").textContent = "Keep at least one person and one class."; return; }
+  const title = $("#set-title").value.trim() || "Task Desk";
+  const subtitle = $("#set-subtitle").value.trim();
   const btn = $("#set-save"); btn.disabled = true; btn.textContent = "Saving…";
   try {
-    const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ people, classes }) });
+    const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ people, classes, title, subtitle }) });
     const s = await r.json(); if (!r.ok) throw new Error();
-    APP_PEOPLE = s.people; APP_CLASSES = s.classes;
-    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES);
+    APP_PEOPLE = s.people; APP_CLASSES = s.classes; APP_TITLE = s.title; APP_SUBTITLE = s.subtitle;
+    applyPeople(APP_PEOPLE); applyClasses(APP_CLASSES); applyBranding(APP_TITLE, APP_SUBTITLE);
     closeSettings();
   } catch (e) { $("#set-err").textContent = "Couldn't save settings."; }
   finally { btn.disabled = false; btn.textContent = "Save"; }
 };
 $("#openSet").onclick = openSettings;
+
+// change my own password (available to every user)
+function openPwdModal() { $("#pwd-cur").value = ""; $("#pwd-new").value = ""; $("#pwd-conf").value = ""; $("#pwd-err").textContent = ""; $("#pwdScrim").classList.add("open"); setTimeout(() => $("#pwd-cur").focus(), 40); }
+function closePwdModal() { $("#pwdScrim").classList.remove("open"); }
+$("#openPwd").onclick = openPwdModal;
+$("#pwd-cancel").onclick = closePwdModal;
+$("#pwdScrim").addEventListener("click", e => { if (e.target.id === "pwdScrim") closePwdModal(); });
+$("#pwd-save").onclick = async () => {
+  const cur = $("#pwd-cur").value, nw = $("#pwd-new").value, cf = $("#pwd-conf").value;
+  const err = $("#pwd-err"); err.textContent = "";
+  if (nw.length < 4) { err.textContent = "New password must be at least 4 characters."; return; }
+  if (nw !== cf) { err.textContent = "New passwords don't match."; return; }
+  const btn = $("#pwd-save"); btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const r = await fetch("/api/me/password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: cur, newPassword: nw }) });
+    const d = await r.json(); if (!r.ok) { err.textContent = d.error || "Couldn't change password."; return; }
+    closePwdModal();
+  } catch (e) { err.textContent = "Couldn't reach the server."; }
+  finally { btn.disabled = false; btn.textContent = "Change password"; }
+};
+
+// user management (acts immediately — separate from the Save above; admin only)
+$("#set-adduser").onclick = async () => {
+  const username = (prompt("New user's login username (letters, numbers, . _ -):") || "").trim();
+  if (!username) return;
+  const name = (prompt("Display name:", username) || "").trim() || username;
+  const password = prompt("Password (at least 4 characters):") || "";
+  try {
+    const r = await fetch("/api/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, name, password }) });
+    const d = await r.json(); if (!r.ok) { alert(d.error || "Couldn't add user."); return; }
+    renderUserList();
+  } catch (e) { alert("Couldn't reach the server."); }
+};
+$("#set-users").addEventListener("click", async e => {
+  const roleBtn = e.target.closest("[data-role]");
+  const reset = e.target.closest("[data-reset]");
+  const del = e.target.closest("[data-deluser]");
+  if (roleBtn) {
+    const to = roleBtn.dataset.to;
+    if (!confirm(`Change "${roleBtn.dataset.role}" to ${to}?`)) return;
+    try {
+      const r = await fetch(`/api/users/${encodeURIComponent(roleBtn.dataset.role)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: to }) });
+      const d = await r.json(); if (!r.ok) { alert(d.error || "Couldn't change role."); return; }
+      renderUserList();
+    } catch (e2) { alert("Couldn't reach the server."); }
+  } else if (reset) {
+    const pw = prompt(`New password for ${reset.dataset.reset} (at least 4 characters):`) || "";
+    if (!pw) return;
+    try { const r = await fetch(`/api/users/${encodeURIComponent(reset.dataset.reset)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) }); const d = await r.json(); if (!r.ok) alert(d.error || "Couldn't reset."); else alert("Password updated."); }
+    catch (e2) { alert("Couldn't reach the server."); }
+  } else if (del) {
+    if (!confirm(`Remove user "${del.dataset.deluser}"? They won't be able to sign in.`)) return;
+    try { const r = await fetch(`/api/users/${encodeURIComponent(del.dataset.deluser)}`, { method: "DELETE" }); const d = await r.json(); if (!r.ok) { alert(d.error || "Couldn't remove."); return; } renderUserList(); }
+    catch (e2) { alert("Couldn't reach the server."); }
+  }
+});
 
 $("#login-btn").onclick = doLogin;
 $("#login-pass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
@@ -1684,7 +1816,7 @@ $("#refreshBtn").onclick = async () => {
 async function init() {
   try {
     const r = await fetch("/api/me");
-    if (r.ok) { const data = await r.json(); startSession(data.name); }
+    if (r.ok) { const data = await r.json(); startSession(data.name, data.role); }
     else showLogin();
   } catch (e) { showLogin(); }
 }
