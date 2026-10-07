@@ -415,6 +415,7 @@
     width: 36px; height: 36px; border-radius: 50%; transition: .15s; padding: 0;
   }
   .refresh:hover { color: var(--ink); border-color: var(--line-strong); }
+  .refresh[hidden] { display: none; }
   .refresh svg { width: 16px; height: 16px; }
   .refresh.spinning svg { animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
